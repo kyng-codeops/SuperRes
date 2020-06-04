@@ -10,7 +10,7 @@ To install these prerequisites for OpenCV on macOS execute the following command
     $ brew install jpeg libpng libtiff openexr
     $ brew install eigen tbb
 
-A tool you’ll learn to love is wget . All wget  does is download files from the command line. We can use Homebrew to install wget:
+Optional and convenient for cut-and-paste from web articles/how-to's:
 
     $ brew install wget
 
@@ -27,7 +27,8 @@ By default pyenv does not install python library files for building opencv from 
     $ env PYTHON_CONFIGURE_OPTS="--enable-shared" pyenv install 3.6.10
 
 
-## WARNING: building & linking has other complications in virtual sub-envs for python3 (use above pyenv install instead)
+## WARNING: manual building python outside of pyenv then linking under pyenv has other complications
+# in virtual sub-envs for python3 (use above pyenv install instead)
 #   NOT Used:
         $ wget http://www.python.org/ftp/python/3.6.10/Python-3.6.10.tgz
         $ tar -zvxf Python-3.6.10.tgz
@@ -67,14 +68,14 @@ cd .pyenv/versions/py36cv4/lib/python3.6/site-packages/
 ln -s /usr/local/lib/python3.6/site-packages/cv2/python-3.6/cv2.cpython-36m-darwin.so ./cv2.so
 
 """
+
 import os
 import sys
 import urllib.request
 import zipfile
 import subprocess
 
-
-# Get some environment paths for the build
+# Get environment paths for the build
 
 # Python3 Include path
 import distutils.sysconfig
