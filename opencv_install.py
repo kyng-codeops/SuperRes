@@ -67,6 +67,16 @@ sudo make install
 cd .pyenv/versions/py36cv4/lib/python3.6/site-packages/
 ln -s /usr/local/lib/python3.6/site-packages/cv2/python-3.6/cv2.cpython-36m-darwin.so ./cv2.so
 
+Trying to re-compile opencv with NVIDIA CUDA and CUDNN required older version of xcode
+NVIDIA directions:
+https://docs.nvidia.com/cuda/cuda-installation-guide-mac-os-x/index.html
+Apple Dev with Xcode 10.2
+https://developer.apple.com/download/more/
+
+    $ sudo xcode-select -s /Applications/Xcode\ 10.2.app/Contents/Developer
+    $ xcode-select --install
+    $ cc --version
+
 """
 
 import os
@@ -88,7 +98,7 @@ py3bin = subprocess.check_output('which python3', shell=True).decode('utf-8').st
 # Get the Python3 Library path
 s = subprocess.check_output("python3-config --configdir", shell=True).decode("utf-8").strip()
 (M, m) = sys.version_info[:2]
-py3lib = "{}/libpython{}.{}.dylib".format(s, M, m)
+# py3lib_o = "{}/libpython{}.{}.dylib".format(s, M, m)
 
 # .//.pyenv/versions/3.6.10/Python.framework/Versions/3.6/lib/libpython3.6.dylib
 # .//.pyenv/versions/3.6.10/Python.framework/Versions/3.6/lib/python3.6/config-3.6m-darwin/libpython3.6.dylib
@@ -96,10 +106,9 @@ home = os.getenv('HOME')
 
 py3libDir = distutils.sysconfig.get_config_var('LIBDIR')
 py3lib = '{}/{}'.format(py3libDir, distutils.sysconfig.get_config_var('LDLIBRARY'))
-# Manual Override
-# py3libDir = '{}/.venvs/py36cv4/'.format(home)
-# py3lib = '{}/.pyenv/versions/3.6.10/envs/py36cv4/{}'.format(home, distutils.sysconfig.get_config_var('LDLIBRARY'))
-py3numpy = '{}/.pyenv/versions/3.6.10/envs/py36cv4/lib/python3.6/site-packages/numpy/core/include/'.format(home)
+
+py3numpy = '{}/lib/python{}.{}/site-packages/numpy/core/include/'.format('/'.join(py3bin.split('/')[:-2]), M, m)
+# py3numpy = '{}/site-package/numpy/core/include'.format(distutils.sysconfig.get_config_var('BINLIBDEST')) # not in envs
 
 if not os.path.isfile(py3lib):
     print('invalid py3lib={}'.format(py3lib))
@@ -141,17 +150,23 @@ if not os.path.isdir(ver_con_dir):
 # if os.path.isdir(ver_con_dir):
 #     os.rename(ver_con_dir, './opencv_contrib')
 
-build_dir = '{}/build'.format(ver_dir)
+build_dir = '{}/src/build/opencv-{}'.format(home, opencv_ver)
 if os.path.isdir(ver_dir) and os.path.isdir(ver_con_dir):
     if not os.path.isdir(build_dir):
-        os.mkdir(build_dir)
+        s_dirs = build_dir.split('/')
+        for sd in s_dirs[3:]:
+            if not os.path.isdir(sd):
+                os.mkdir(sd)
+                os.chdir(sd)
+        # if not os.path.isdir('{}/src'.format(home)):
+        #     os.mkdir('{}/src'.format(home))
+        # os.mkdir(build_dir)
     os.chdir(build_dir)
     d = os.getcwd()
     cmd = [
         'cmake', '-D', 'CMAKE_BUILD_TYPE=RELEASE', '-D', 'CMAKE_INSTALL_PREFIX=/usr/local',
         '-D', 'OPENCV_EXTRA_MODULES_PATH={}/modules'.format(ver_con_dir),
         '-D', 'opencv_dnn_superres=ON',
-        '-D', 'WITH_OPENCL=ON',
         '-D', 'PYTHON3_LIBRARY={}'.format(py3lib),
         '-D', 'PYTHON3_INCLUDE_DIR={}'.format(py3inc),
         '-D', 'PYTHON3_EXECUTABLE={}'.format(py3bin),
@@ -161,8 +176,21 @@ if os.path.isdir(ver_dir) and os.path.isdir(ver_con_dir):
         '-D', 'INSTALL_PYTHON_EXAMPLES=ON',
         '-D', 'INSTALL_C_EXAMPLES=OFF',
         '-D', 'OPENCV_ENABLE_NONFREE=ON',
-        '-D', 'BUILD_EXAMPLES=ON', '..'
+        '-D', 'BUILD_EXAMPLES=ON', ver_dir
     ]
+    cmd_gpu_extra = [
+        '-D', 'WITH_OPENCL=ON',
+        '-D', 'WITH_CUDA=ON',
+        '-D', 'WITH_CUDNN=ON',
+        '-D', 'OPENCV_DNN_CUDA=ON',
+        '-D', 'ENABLE_FAST_MATH=1',
+        '-D', 'CUDA_FAST_MATH=1',
+        '-D', 'CUDA_ARCH_BIN=3.0',
+        '-D', 'WITH_CUBLAS=1',
+        '-D', 'CUDNN_INCLUDE_DIR=/Developer/NVIDIA/CUDA-10.1/include',
+        '-D', 'CUDNN_LIBRARY=/Developer/NVIDIA/CUDA-10.1/lib/libcudnn.dylib'
+    ]
+
     print('About to run...\n\n{}\n\n'.format(' '.join(cmd)))
     # process = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, shell=False)
     # while True:

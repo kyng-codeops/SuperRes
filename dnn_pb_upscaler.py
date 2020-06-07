@@ -58,11 +58,11 @@ if __name__ == "__main__":
     # Create an SR object
     sr = dnn_superres.DnnSuperResImpl_create()
 
-    modname = 'lapsrn'
+    modname = 'edsr'
     upsize = 4
-    file_pattern = '1003_all_hi.mp4'
+    file_pattern = 'a9d46429486d82122cb69c64148efc63.jpg'
     homedir = os.getenv('HOME')
-    workdir = '{}/Downloads/1003_ghg'.format(homedir)
+    workdir = '{}/Downloads/'.format(homedir)
     v_start = 757
     v_stop = 5000
 
