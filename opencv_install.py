@@ -101,179 +101,230 @@ brew search, only gtkglext exist. The actual cmake complaint is only that
 OpenGL GUI is not supported (meaning use ogl for cv2.imshow?)--not a big deal.
 
 """
-
 import os
 import sys
 import urllib.request
 import zipfile
 import subprocess
-
-# Get environment paths for the build
-
-# Python3 Include path
 import distutils.sysconfig
-py3inc = distutils.sysconfig.get_python_inc()
-# py3lib = distutils.sysconfig.get_python_lib()
 
-py3bin = '{}/bin/python'.format(os.getenv('VIRTUALENV'))
-py3bin = subprocess.check_output('which python3', shell=True).\
-            decode('utf-8').strip()
 
-# Get the Python3 Library path
-s = subprocess.check_output("python3-config --configdir", shell=True).\
-        decode("utf-8").strip()
-(M, m) = sys.version_info[:2]
-# py3lib_o = "{}/libpython{}.{}.dylib".format(s, M, m)
+def run_realtime(cmd):
+    proc = subprocess.Popen(
+            cmd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
+            shell=False)
+    while True:
+        try:
+            output = proc.stdout.readline()
+            print(output.decode('utf-8').strip())
+            if proc.poll() is not None:
+                break
+        except:
+            raise
+    return proc.poll()
 
-# .//.pyenv/versions/3.6.10/Python.framework/Versions/3.6/lib/libpython3.6.dylib
-# .//.pyenv/versions/3.6.10/Python.framework/Versions/3.6/lib/python3.6/config-3.6m-darwin/libpython3.6.dylib
-home = os.getenv('HOME')
 
-py3libDir = distutils.sysconfig.get_config_var('LIBDIR')
-py3lib = '{}/{}'.format(py3libDir,
-                        distutils.sysconfig.get_config_var('LDLIBRARY'))
+if __name__ == "__main__":
 
-py3numpy = '{}/lib/python{}.{}/site-packages/numpy/core/include/'.\
-            format('/'.join(py3bin.split('/')[:-2]), M, m)
-# py3numpy = '{}/site-package/numpy/core/include'.\
-# format(distutils.sysconfig.get_config_var('BINLIBDEST')) # not in envs
+    # Python3 Include path
+    py3inc = distutils.sysconfig.get_python_inc()
+    # py3lib = distutils.sysconfig.get_python_lib()
 
-# Check path existence and prereqs
-if not os.path.isfile(py3lib):
-    print('invalid py3lib={}'.format(py3lib))
-if not os.path.isdir(py3libDir):
-    print('invalid py3libDir={}'.format(py3libDir))
-if not os.path.isdir(py3inc):
-    print('invalid py3inc={}'.format(py3inc))
-if not os.path.isdir(py3numpy):
-    print('invalid py3numpy={}'.format(py3numpy))
+    # py3bin = '{}/bin/python'.format(os.getenv('VIRTUALENV'))
+    py3bin = subprocess.check_output('which python3', shell=True).\
+                decode('utf-8').strip()
 
-brew_list = ['cmake', 'pkg-config',
-             'jpeg', 'libpng', 'libtiff',
-             'openexr', 'eigen', 'tbb', 'ffmpeg']
-brew_missing = []
-for m in brew_list:
-    # Assuming macOS user is using Homebrew for package management
-    if not os.path.isdir('/usr/local/Cellar/{}'.format(m)):
-        brew_missing.append(m)
-if len(brew_missing) > 0:
-    print('You are missing some prerequisits!! Run the following:')
-    print('brew install {}'.format(' '.join(brew_missing)))
-    raise Exception('You are missing some prerequisits!! Run the following:\n\
-                     brew install {}'.format(' '.join(brew_missing)))
+    # Get the Python3 Library path
+    s = subprocess.check_output("python3-config --configdir", shell=True).\
+            decode("utf-8").strip()
+    (M, m) = sys.version_info[:2]
+    # py3lib_o = "{}/libpython{}.{}.dylib".format(s, M, m)
 
-opencv_ver = '4.3.0'
+    home = os.getenv('HOME')
 
-ver_dir = '{}/opencv-{}'.format(home, opencv_ver)
-ver_con_dir = '{}/opencv_contrib-{}'.format(home, opencv_ver)
+    py3libDir = distutils.sysconfig.get_config_var('LIBDIR')
+    py3lib = '{}/{}'.format(py3libDir,
+                            distutils.sysconfig.get_config_var('LDLIBRARY'))
 
-os.chdir(home)
+    py3numpy = '{}/lib/python{}.{}/site-packages/numpy/core/include/'.\
+                format('/'.join(py3bin.split('/')[:-2]), M, m)
+    # py3numpy = '{}/site-package/numpy/core/include'.\
+    # format(distutils.sysconfig.get_config_var('BINLIBDEST')) # not in envs
 
-if not os.path.isdir(ver_dir):
+    # Check path existence and prereqs
+    if not os.path.isfile(py3lib):
+        print('invalid py3lib={}'.format(py3lib))
+    if not os.path.isdir(py3libDir):
+        print('invalid py3libDir={}'.format(py3libDir))
+    if not os.path.isdir(py3inc):
+        print('invalid py3inc={}'.format(py3inc))
+    if not os.path.isdir(py3numpy):
+        print('invalid py3numpy={}'.format(py3numpy))
 
-    url = 'https://github.com/opencv/opencv/archive/{}.zip'.\
-        format(opencv_ver)
-    zip = './opencv.zip'
-    if not os.path.isfile(zip):
-        print('downloading... {} from {}'.format(zip, url))
-        urllib.request.urlretrieve(url, zip)
-    with zipfile.ZipFile(zip, 'r') as zip_ref:
-        zip_ref.extractall('./')
+    brew_list = ['cmake', 'pkg-config',
+                'jpeg', 'libpng', 'libtiff',
+                'openexr', 'eigen', 'tbb', 'ffmpeg']
+    brew_missing = []
+    for mod in brew_list:
+        # Assuming macOS user is using Homebrew for package management
+        if not os.path.isdir('/usr/local/Cellar/{}'.format(mod)):
+            brew_missing.append(mod)
+    if len(brew_missing) > 0:
+        print('You are missing some prerequisits!! Run the following:')
+        print('brew install {}'.format(' '.join(brew_missing)))
+        raise Exception('You are missing some prerequisits!! Run the following:\n\
+                        brew install {}'.format(' '.join(brew_missing)))
 
-if not os.path.isdir(ver_con_dir):
-    zip = './opencv_contrib.zip'
-    url = 'https://github.com/opencv/opencv_contrib/archive/{}.zip'.\
-        format(opencv_ver)
-    if not os.path.isfile(zip):
-        print('downloading... {} from {}'.format(zip, url))
-        urllib.request.urlretrieve(url, zip)
-    with zipfile.ZipFile(zip, 'r') as zip_ref:
-        zip_ref.extractall('./')
+    opencv_ver = '4.3.0'
 
-# if os.path.isdir(ver_dir):
-#     os.rename(ver_dir, './opencv')
-# if os.path.isdir(ver_con_dir):
-#     os.rename(ver_con_dir, './opencv_contrib')
+    ver_dir = '{}/opencv-{}'.format(home, opencv_ver)
+    ver_con_dir = '{}/opencv_contrib-{}'.format(home, opencv_ver)
 
-build_dir = '{}/src/build/opencv-{}'.format(home, opencv_ver)
-if os.path.isdir(ver_dir) and os.path.isdir(ver_con_dir):
-    if not os.path.isdir(build_dir):
-        s_dirs = build_dir.split('/')
-        for sd in s_dirs[3:]:
-            if not os.path.isdir(sd):
-                os.mkdir(sd)
-                os.chdir(sd)
-        # if not os.path.isdir('{}/src'.format(home)):
-        #     os.mkdir('{}/src'.format(home))
-        # os.mkdir(build_dir)
-    os.chdir(build_dir)
-    d = os.getcwd()
-    cmd = [
-        'cmake', '-D',
-        'CMAKE_BUILD_TYPE=RELEASE',
-        '-D', 'CMAKE_INSTALL_PREFIX=/usr/local',
-        '-D', 'OPENCV_EXTRA_MODULES_PATH={}/modules'.format(ver_con_dir),
-        '-D', 'opencv_dnn_superres=ON',
-        '-D', 'PYTHON3_LIBRARY={}'.format(py3lib),
-        '-D', 'PYTHON3_INCLUDE_DIR={}'.format(py3inc),
-        '-D', 'PYTHON3_EXECUTABLE={}'.format(py3bin),
-        '-D', 'PYTHON3_NUMPY_INCLUDE_DIRS={}'.format(py3numpy),
-        '-D', 'BUILD_opencv_python2=OFF',
-        '-D', 'BUILD_opencv_python3=ON',
-        '-D', 'INSTALL_PYTHON_EXAMPLES=ON',
-        '-D', 'INSTALL_C_EXAMPLES=OFF',
-        '-D', 'OPENCV_ENABLE_NONFREE=ON',
-        '-D', 'BUILD_EXAMPLES=ON'
-    ]
-    cmd_ocl_normal = [
-        '-D', 'WITH_OPENCL=ON',
-        '-D', 'OPENCL_INCLUDE_DIRS={}/3rdparty/include'.format(ver_dir),
-        '-D', 'WITH_OPENGL=ON'
-    ]
+    os.chdir(home)
 
-    cmd_ocl_staticlib = [
-        '-D', 'WITH_OPENCL=OFF',
-        '-D', 'HAVE_OPENCL=ON',
-        '-D', 'HAVE_OPENCL_STATIC=ON',
-        '-D', 'OPENCL_LIBRARIES=/System/Library/Frameworks/OpenCL,framework/OpenCL',
-        '-D', 'OPENCL_INCLUDE_DIRS={}/3rdparty/include'.format(ver_dir),
-        '-D', 'WITH_OPENGL=ON'
-    ]
-    #    '-D', 'OPENCL_LIBRARIES=/path/libOpenCL.so',
+    if not os.path.isdir(ver_dir):
 
-    cmd_gpu_nvidia = [
-        '-D', 'WITH_CUDA=ON',
-        '-D', 'WITH_CUDNN=ON',
-        '-D', 'OPENCV_DNN_CUDA=ON',
-        '-D', 'ENABLE_FAST_MATH=1',
-        '-D', 'CUDA_FAST_MATH=1',
-        '-D', 'CUDA_ARCH_BIN=3.0',
-        '-D', 'WITH_CUBLAS=1',
-        '-D', 'CUDNN_INCLUDE_DIR=/Developer/NVIDIA/CUDA-10.1/include',
-        '-D', 'CUDNN_LIBRARY=/Developer/NVIDIA/CUDA-10.1/lib/libcudnn.dylib'
-    ]
-    cmd = cmd + cmd_ocl_normal
-    cmd.append(ver_dir)
-    print('About to run...\n\n{}\n\n'.format(' '.join(cmd)))
-    # process = subprocess.Popen(
-    #     cmd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, shell=False)
-    # while True:
-    #     try:
-    #         output = process.stdout.readline()
-    #         print(output.strip())
-    #         if output == b'' and process.poll() is not None:
-    #             break
-    #     except:
-    #         pass
-    # pass
-    output = subprocess.check_output(cmd, universal_newlines=True, shell=False)
-    print('\n{}'.format(output.strip()))
-else:
-    print(
-        'Directories [{}] and [{}] do not exist.. nothing to do'.
-        format(ver_dir, ver_con_dir))
+        url = 'https://github.com/opencv/opencv/archive/{}.zip'.\
+            format(opencv_ver)
+        zip = './opencv.zip'
+        if not os.path.isfile(zip):
+            print('downloading... {} from {}'.format(zip, url))
+            urllib.request.urlretrieve(url, zip)
+        with zipfile.ZipFile(zip, 'r') as zip_ref:
+            zip_ref.extractall('./')
 
-print(
-    'Ready to make build:\n\
-    cd {}; make -j4; sudo make install'.
-    format(build_dir))
+    if not os.path.isdir(ver_con_dir):
+        zip = './opencv_contrib.zip'
+        url = 'https://github.com/opencv/opencv_contrib/archive/{}.zip'.\
+            format(opencv_ver)
+        if not os.path.isfile(zip):
+            print('downloading... {} from {}'.format(zip, url))
+            urllib.request.urlretrieve(url, zip)
+        with zipfile.ZipFile(zip, 'r') as zip_ref:
+            zip_ref.extractall('./')
+
+    # if os.path.isdir(ver_dir):
+    #     os.rename(ver_dir, './opencv')
+    # if os.path.isdir(ver_con_dir):
+    #     os.rename(ver_con_dir, './opencv_contrib')
+
+    build_dir = '{}/src/build/opencv-{}'.format(home, opencv_ver)
+    if os.path.isdir(ver_dir) and os.path.isdir(ver_con_dir):
+        if not os.path.isdir(build_dir):
+            s_dirs = build_dir.split('/')
+            for sd in s_dirs[3:]:
+                if not os.path.isdir(sd):
+                    os.mkdir(sd)
+                    os.chdir(sd)
+            # if not os.path.isdir('{}/src'.format(home)):
+            #     os.mkdir('{}/src'.format(home))
+            # os.mkdir(build_dir)
+        os.chdir(build_dir)
+        d = os.getcwd()
+        cmd = [
+            'cmake', '-D',
+            'CMAKE_BUILD_TYPE=RELEASE',
+            '-D', 'CMAKE_INSTALL_PREFIX=/usr/local',
+            '-D', 'OPENCV_EXTRA_MODULES_PATH={}/modules'.format(ver_con_dir),
+            '-D', 'opencv_dnn_superres=ON',
+            '-D', 'PYTHON3_LIBRARY={}'.format(py3lib),
+            '-D', 'PYTHON3_INCLUDE_DIR={}'.format(py3inc),
+            '-D', 'PYTHON3_EXECUTABLE={}'.format(py3bin),
+            '-D', 'PYTHON3_NUMPY_INCLUDE_DIRS={}'.format(py3numpy),
+            '-D', 'BUILD_opencv_python2=OFF',
+            '-D', 'BUILD_opencv_python3=ON',
+            '-D', 'INSTALL_PYTHON_EXAMPLES=ON',
+            '-D', 'INSTALL_C_EXAMPLES=OFF',
+            '-D', 'OPENCV_ENABLE_NONFREE=ON',
+            '-D', 'BUILD_EXAMPLES=ON'
+        ]
+        cmd_ocl_normal = [
+            '-D', 'WITH_OPENCL=ON',
+            '-D', 'OPENCL_INCLUDE_DIRS={}/3rdparty/include'.format(ver_dir),
+            '-D', 'WITH_OPENGL=ON'
+        ]
+
+        cmd_ocl_staticlib = [
+            '-D', 'WITH_OPENCL=OFF',
+            '-D', 'HAVE_OPENCL=ON',
+            '-D', 'HAVE_OPENCL_STATIC=ON',
+            '-D', 'OPENCL_LIBRARIES=/System/Library/Frameworks/OpenCL,framework/OpenCL',
+            '-D', 'OPENCL_INCLUDE_DIRS={}/3rdparty/include'.format(ver_dir),
+            '-D', 'WITH_OPENGL=ON'
+        ]
+        #    '-D', 'OPENCL_LIBRARIES=/path/libOpenCL.so',
+
+        cmd_gpu_nvidia = [
+            '-D', 'WITH_CUDA=ON',
+            '-D', 'WITH_CUDNN=ON',
+            '-D', 'OPENCV_DNN_CUDA=ON',
+            '-D', 'ENABLE_FAST_MATH=1',
+            '-D', 'CUDA_FAST_MATH=1',
+            '-D', 'CUDA_ARCH_BIN=3.0',
+            '-D', 'WITH_CUBLAS=1',
+            '-D', 'CUDNN_INCLUDE_DIR=/Developer/NVIDIA/CUDA-10.1/include',
+            '-D', 'CUDNN_LIBRARY=/Developer/NVIDIA/CUDA-10.1/lib/libcudnn.dylib'
+        ]
+        cmd = cmd + cmd_ocl_normal
+        cmd.append(ver_dir)
+        print('About to run...\n\n{}\n\n'.format(' '.join(cmd)))
+
+        #
+        # Ask to run cmake
+        #
+        a = input(
+            '\nbuild_dir: [{}]\n\nConfigure make files with "cmake"? [y/N] '.
+            format(build_dir))
+        if a[:1].lower() == 'y':
+            # output = subprocess.check_output(cmd, universal_newlines=True, shell=False)
+            # print('\n{}'.format(output.strip()))
+            run_realtime(cmd)
+    else:
+        print(
+            'Directories [{}] and [{}] do not exist.. nothing to do'.
+            format(ver_dir, ver_con_dir))
+
+
+    #
+    # Ask to run make to compile/build
+    #
+    a = input('\nRun "make" to compile opencv? [y/N]? ')
+    if a[:1].lower() == 'y':
+        a = input(
+            '\n{} cpu cores detected, enter number of make threads: '.
+            format(os.cpu_count())
+            )
+        try:
+            os.chdir(build_dir)
+            cmd = ['make', '-j{}'.format(int(a))]
+            run_realtime(cmd)
+        except ValueError:
+            raise('[{}] is an invalid number'.format(a))
+
+    #
+    # Ask to install opencv build into /usr/local
+    #
+    a = input('\nRun "make install" to install opencv libraries to /usr/local? [y/N] ')
+    if a[:1].lower() == 'y':
+        cmd = ['sudo', 'make', 'install']
+        run_realtime(cmd)
+
+    #
+    # Ask to link cv2.so file
+    #
+    src_lib_path = '/usr/local/lib/python{}.{}/site-packages/cv2/python-{}.{}'.\
+        format(M, m, M, m)
+    src_lib = 'cv2.cpython-{}{}m-darwin.so'.format(M, m)
+    venv_root = '/'.join(py3bin.split('/')[:-2])
+    venv_lib = '{}/lib/python{}.{}/site-packages/cv2.so'.format(venv_root, M, m)
+    print('\nPython venv is current:\n{}'.format(venv_root))
+
+    a = input('\nLink opencv libs to current python env? [y/N] ')
+    if a[:1].lower() == 'y':
+        s = '/'.join([src_lib_path, src_lib])
+        if os.path.isfile(s):
+            if not os.path.isfile(venv_lib):
+                os.symlink(s, venv_lib)
+                print('Sucessfully link: {}'.format(venv_lib))
+            else:
+                print('\n\tNot linking: {} already exists\n'.format(venv_lib))
