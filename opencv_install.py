@@ -101,6 +101,7 @@ brew search, only gtkglext exist. The actual cmake complaint is only that
 OpenGL GUI is not supported (meaning use ogl for cv2.imshow?)--not a big deal.
 
 """
+
 import os
 import sys
 import urllib.request
@@ -126,28 +127,32 @@ def run_realtime(cmd):
 
 if __name__ == "__main__":
 
+    OPENCV_VER = '4.3.0'
+    HOMEDIR = os.getenv('HOME')
+    VER_DIR = '{}/opencv-{}'.format(HOMEDIR, OPENCV_VER)
+    VER_CON_DIR = '{}/opencv_contrib-{}'.format(HOMEDIR, OPENCV_VER)
+
+
     # Python3 Include path
     py3inc = distutils.sysconfig.get_python_inc()
-    # py3lib = distutils.sysconfig.get_python_lib()
 
     # py3bin = '{}/bin/python'.format(os.getenv('VIRTUALENV'))
-    py3bin = subprocess.check_output('which python3', shell=True).\
-                decode('utf-8').strip()
+    py3bin = subprocess.check_output('which python3', shell=True)
+    py3bin = py3bin.decode('utf-8').strip()
 
     # Get the Python3 Library path
-    s = subprocess.check_output("python3-config --configdir", shell=True).\
-            decode("utf-8").strip()
+    s = subprocess.check_output("python3-config --configdir", shell=True)
+    s = s.decode("utf-8").strip()
     (M, m) = sys.version_info[:2]
     # py3lib_o = "{}/libpython{}.{}.dylib".format(s, M, m)
 
-    home = os.getenv('HOME')
-
     py3libDir = distutils.sysconfig.get_config_var('LIBDIR')
-    py3lib = '{}/{}'.format(py3libDir,
-                            distutils.sysconfig.get_config_var('LDLIBRARY'))
+    py3lib = '{}/{}'.format(
+        py3libDir,
+        distutils.sysconfig.get_config_var('LDLIBRARY'))
 
     py3numpy = '{}/lib/python{}.{}/site-packages/numpy/core/include/'.\
-                format('/'.join(py3bin.split('/')[:-2]), M, m)
+        format('/'.join(py3bin.split('/')[:-2]), M, m)
     # py3numpy = '{}/site-package/numpy/core/include'.\
     # format(distutils.sysconfig.get_config_var('BINLIBDEST')) # not in envs
 
@@ -161,9 +166,10 @@ if __name__ == "__main__":
     if not os.path.isdir(py3numpy):
         print('invalid py3numpy={}'.format(py3numpy))
 
-    brew_list = ['cmake', 'pkg-config',
-                'jpeg', 'libpng', 'libtiff',
-                'openexr', 'eigen', 'tbb', 'ffmpeg']
+    brew_list = [
+        'cmake', 'pkg-config',
+        'jpeg', 'libpng', 'libtiff',
+        'openexr', 'eigen', 'tbb', 'ffmpeg']
     brew_missing = []
     for mod in brew_list:
         # Assuming macOS user is using Homebrew for package management
@@ -175,17 +181,12 @@ if __name__ == "__main__":
         raise Exception('You are missing some prerequisits!! Run the following:\n\
                         brew install {}'.format(' '.join(brew_missing)))
 
-    opencv_ver = '4.3.0'
+    os.chdir(HOMEDIR)
 
-    ver_dir = '{}/opencv-{}'.format(home, opencv_ver)
-    ver_con_dir = '{}/opencv_contrib-{}'.format(home, opencv_ver)
-
-    os.chdir(home)
-
-    if not os.path.isdir(ver_dir):
+    if not os.path.isdir(VER_DIR):
 
         url = 'https://github.com/opencv/opencv/archive/{}.zip'.\
-            format(opencv_ver)
+            format(OPENCV_VER)
         zip = './opencv.zip'
         if not os.path.isfile(zip):
             print('downloading... {} from {}'.format(zip, url))
@@ -193,23 +194,18 @@ if __name__ == "__main__":
         with zipfile.ZipFile(zip, 'r') as zip_ref:
             zip_ref.extractall('./')
 
-    if not os.path.isdir(ver_con_dir):
+    if not os.path.isdir(VER_CON_DIR):
         zip = './opencv_contrib.zip'
         url = 'https://github.com/opencv/opencv_contrib/archive/{}.zip'.\
-            format(opencv_ver)
+            format(OPENCV_VER)
         if not os.path.isfile(zip):
             print('downloading... {} from {}'.format(zip, url))
             urllib.request.urlretrieve(url, zip)
         with zipfile.ZipFile(zip, 'r') as zip_ref:
             zip_ref.extractall('./')
 
-    # if os.path.isdir(ver_dir):
-    #     os.rename(ver_dir, './opencv')
-    # if os.path.isdir(ver_con_dir):
-    #     os.rename(ver_con_dir, './opencv_contrib')
-
-    build_dir = '{}/src/build/opencv-{}'.format(home, opencv_ver)
-    if os.path.isdir(ver_dir) and os.path.isdir(ver_con_dir):
+    build_dir = '{}/src/build/opencv-{}'.format(HOMEDIR, OPENCV_VER)
+    if os.path.isdir(VER_DIR) and os.path.isdir(VER_CON_DIR):
         if not os.path.isdir(build_dir):
             s_dirs = build_dir.split('/')
             for sd in s_dirs[3:]:
@@ -225,7 +221,7 @@ if __name__ == "__main__":
             'cmake', '-D',
             'CMAKE_BUILD_TYPE=RELEASE',
             '-D', 'CMAKE_INSTALL_PREFIX=/usr/local',
-            '-D', 'OPENCV_EXTRA_MODULES_PATH={}/modules'.format(ver_con_dir),
+            '-D', 'OPENCV_EXTRA_MODULES_PATH={}/modules'.format(VER_CON_DIR),
             '-D', 'opencv_dnn_superres=ON',
             '-D', 'PYTHON3_LIBRARY={}'.format(py3lib),
             '-D', 'PYTHON3_INCLUDE_DIR={}'.format(py3inc),
@@ -240,7 +236,7 @@ if __name__ == "__main__":
         ]
         cmd_ocl_normal = [
             '-D', 'WITH_OPENCL=ON',
-            '-D', 'OPENCL_INCLUDE_DIRS={}/3rdparty/include'.format(ver_dir),
+            '-D', 'OPENCL_INCLUDE_DIRS={}/3rdparty/include'.format(VER_DIR),
             '-D', 'WITH_OPENGL=ON'
         ]
 
@@ -249,7 +245,7 @@ if __name__ == "__main__":
             '-D', 'HAVE_OPENCL=ON',
             '-D', 'HAVE_OPENCL_STATIC=ON',
             '-D', 'OPENCL_LIBRARIES=/System/Library/Frameworks/OpenCL,framework/OpenCL',
-            '-D', 'OPENCL_INCLUDE_DIRS={}/3rdparty/include'.format(ver_dir),
+            '-D', 'OPENCL_INCLUDE_DIRS={}/3rdparty/include'.format(VER_DIR),
             '-D', 'WITH_OPENGL=ON'
         ]
         #    '-D', 'OPENCL_LIBRARIES=/path/libOpenCL.so',
@@ -266,7 +262,7 @@ if __name__ == "__main__":
             '-D', 'CUDNN_LIBRARY=/Developer/NVIDIA/CUDA-10.1/lib/libcudnn.dylib'
         ]
         cmd = cmd + cmd_ocl_normal
-        cmd.append(ver_dir)
+        cmd.append(VER_DIR)
         print('About to run...\n\n{}\n\n'.format(' '.join(cmd)))
 
         #
@@ -282,8 +278,7 @@ if __name__ == "__main__":
     else:
         print(
             'Directories [{}] and [{}] do not exist.. nothing to do'.
-            format(ver_dir, ver_con_dir))
-
+            format(VER_DIR, VER_CON_DIR))
 
     #
     # Ask to run make to compile/build
