@@ -273,7 +273,11 @@ else:
         'Directories [{}] and [{}] do not exist.. nothing to do'.
         format(ver_dir, ver_con_dir))
 
+<<<<<<< HEAD
 print(
     'Ready to make build:\n\
     cd {}; make -j4; sudo make install'.
     format(build_dir))
+=======
+print('Ready to make build: make -j4; sudo make install')
+>>>>>>> f1374ede18fdee959c75a0d10aab424eb31e0764
