@@ -12,9 +12,9 @@ commands:
     $ brew install eigen tbb
     $ brew install ffmpeg
 
-Optional and convenient for cut-and-paste from web articles/how-to's:
-
-    $ brew install wget
+Optional and convenient:
+    $ brew install webpquicklook
+    $ brew install wget 
 
 Use pyenv instead to install python (since as of 5/2020 3.6.5_1 brew install
 has a broken pip openssl certificate issue).  Also pyenv can do multiple
