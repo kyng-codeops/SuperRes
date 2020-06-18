@@ -3,5 +3,10 @@
 		{
 			"path": "."
 		}
-	]
+	],
+	"settings": {
+		"python.pythonPath": "/Users/kng/.pyenv/versions/3.6.10/bin/python",
+		"python.unitTest.unittestEnabled": true,
+	}
+	
 }
