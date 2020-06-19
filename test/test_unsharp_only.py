@@ -13,23 +13,19 @@ class TestUnits(unittest.TestCase):
     def test_argparse_imseq(self):
         os.chdir(os.path.dirname(os.path.realpath(__file__)))
         print('Working in test directory')
-        cmd = ['-s', '1', '-m', '.7', 'imseq', '-b', '007.png', '-e', '010.png']
-        result = unsharp_only.main(cmd)
-        os.chdir(result)
-        self.assertTrue(os.path.isfile('007.png'))
-        self.assertTrue(os.path.isfile('008.png'))
-        self.assertTrue(os.path.isfile('009.png'))
-        self.assertTrue(os.path.isfile('010.png'))
-        pass
-
+        cmd = ['-s', '1', '-m', '.7', 'imseq', '-b', '0000008.png', '-e', '0000012.png']
+        results = unsharp_only.main(cmd)
+        for o_file in results:
+            self.assertTrue(os.path.isfile(o_file))
+        
     def test_get_cli_args(self):
         os.chdir(os.path.dirname(os.path.realpath(__file__)))
         print('Working in test directory')
-        cmd = [ '-s', '1', '-m', '0.7', '-o','jpg', 'files', '006.png', '007.png' ]
-        result = unsharp_only.main(cmd)
-        os.chdir(result)
-        self.assertTrue(os.path.isfile('006.jpg'))
-        self.assertTrue(os.path.isfile('007.jpg'))
+        cmd = [ '-s', '1', '-m', '0.7', '-o','jpg', 'files', '0000010.png', '0000012.png' ]
+        results = unsharp_only.main(cmd)
+        for o_file in results:
+            self.assertTrue(os.path.isfile(o_file))
+
 
 if __name__ == '__main__':
     unittest.main()

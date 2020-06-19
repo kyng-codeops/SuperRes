@@ -1,3 +1,5 @@
+#!/usr/bin/env python3
+
 import cv2
 from scipy.ndimage.filters import median_filter
 import argparse
@@ -5,6 +7,8 @@ import sys
 import os
 import numpy as np
 import time
+import multiprocessing
+from itertools import product
 
 imw_code = {
     'jpg': ([cv2.IMWRITE_JPEG_QUALITY, 87], 'jpg'),
@@ -54,7 +58,7 @@ def process_pipeline(f, sigma, strength, o_dir, o_ext):
     if was_wrtn:
         unsharp_out = 'unsharp {:.{prec}f} sec'.format(dt, prec=2)
         print('output\t{}:\t{}'.format(f, unsharp_out))
-        return o_path
+        return o_fqn
 
 def get_cli_args(args):
     parser = argparse.ArgumentParser(description='unsharp images')
@@ -103,11 +107,12 @@ def main(args):
     if not os.path.isdir(o_dir):
         os.mkdir(o_dir)
 
-    # workdir = os.getcwd()
+    o_list = []
 
     if im_files_flg:
         for f in file_pattern:
-            o_path = process_pipeline(f, sigma, strength, o_dir, o_ext)
+            o_file = process_pipeline(f, sigma, strength, o_dir, o_ext)
+            o_list.append(o_file)
 
     else:
         f = seq_b.split('.')
@@ -116,11 +121,25 @@ def main(args):
             pad = len(f[0])
             frame_b = int(f[0])
             frame_e = int(seq_e.split('.')[0]) + 1
+            
+            bat_o_args = []
             for frame in range(frame_b, frame_e, 1):
                 f_name = '{:0>{width}}.{}'.format(frame, ext, width=pad)
-                o_path = process_pipeline(f_name, sigma, strength, o_dir, o_ext)
-    
-    return o_path
+                # o_path = process_pipeline(f_name, sigma, strength, o_dir, o_ext)
+                bat_o_args.append((f_name, sigma, strength, o_dir, o_ext))
+            
+            n_proc = min(multiprocessing.cpu_count(), len(bat_o_args))
+            
+            pool = multiprocessing.Pool(n_proc)
+            o_list = pool.starmap(process_pipeline, bat_o_args)
+            pool.close()
+            pool.join()
+            
+            # reorder all mtime atime from out-of-order processing
+            for out_f in o_list:
+                os.utime(out_f)
+
+    return o_list
 
 
 if __name__ == "__main__":
