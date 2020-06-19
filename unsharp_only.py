@@ -8,7 +8,6 @@ import os
 import numpy as np
 import time
 import multiprocessing
-from itertools import product
 
 imw_code = {
     'jpg': ([cv2.IMWRITE_JPEG_QUALITY, 87], 'jpg'),
@@ -59,6 +58,7 @@ def process_pipeline(f, sigma, strength, o_dir, o_ext):
         unsharp_out = 'unsharp {:.{prec}f} sec'.format(dt, prec=2)
         print('output\t{}:\t{}'.format(f, unsharp_out))
         return o_fqn
+    return False
 
 def get_cli_args(args):
     parser = argparse.ArgumentParser(description='unsharp images')
@@ -81,18 +81,19 @@ def get_cli_args(args):
     i_parser.add_argument('-e', '--end', nargs=1, help='ending img 0010.png')
     return parser.parse_args(args)
 
-
 def main(args):
-    dt_set = get_cli_args(args)
-
+    dt_set = get_cli_args(args)    
     
     sigma = int(dt_set.sigma[0])
     strength = float(dt_set.strength[0])
+    
     if isinstance(dt_set.out, list):
         o_ext = dt_set.out[0]
     else:
         o_ext = dt_set.out
+    
     im_files_flg = False
+    
     try:
         file_pattern = dt_set.file
         im_files_flg = True
@@ -108,11 +109,11 @@ def main(args):
         os.mkdir(o_dir)
 
     o_list = []
+    batch_args = []
 
     if im_files_flg:
         for f in file_pattern:
-            o_file = process_pipeline(f, sigma, strength, o_dir, o_ext)
-            o_list.append(o_file)
+            batch_args.append((f, sigma, strength, o_dir, o_ext))
 
     else:
         f = seq_b.split('.')
@@ -122,22 +123,20 @@ def main(args):
             frame_b = int(f[0])
             frame_e = int(seq_e.split('.')[0]) + 1
             
-            bat_o_args = []
             for frame in range(frame_b, frame_e, 1):
                 f_name = '{:0>{width}}.{}'.format(frame, ext, width=pad)
-                # o_path = process_pipeline(f_name, sigma, strength, o_dir, o_ext)
-                bat_o_args.append((f_name, sigma, strength, o_dir, o_ext))
+                batch_args.append((f_name, sigma, strength, o_dir, o_ext))
             
-            n_proc = min(multiprocessing.cpu_count(), len(bat_o_args))
-            
-            pool = multiprocessing.Pool(n_proc)
-            o_list = pool.starmap(process_pipeline, bat_o_args)
-            pool.close()
-            pool.join()
-            
-            # reorder all mtime atime from out-of-order processing
-            for out_f in o_list:
-                os.utime(out_f)
+    n_proc = min(multiprocessing.cpu_count(), len(batch_args))
+    
+    pool = multiprocessing.Pool(n_proc)
+    o_list = pool.starmap(process_pipeline, batch_args)
+    pool.close()
+    pool.join()
+    
+    # reorder all mtime atime from out-of-order processing
+    for out_f in o_list:
+        os.utime(out_f)
 
     return o_list
 
