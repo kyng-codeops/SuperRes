@@ -40,7 +40,8 @@ class TestUnits(unittest.TestCase):
         cmd = [
             fn,
             '-s', '8',
-            '-e', '16'
+            '-e', '16',
+            '--postsharpen', '0.7'
         ]
         result = dnn_pb_upscaler_unsharp.main(cmd)
         output = '{}/{:0>{width}}.*'.format(result, int(cmd[2]), width=7)

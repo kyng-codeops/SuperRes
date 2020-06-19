@@ -1,3 +1,5 @@
+#!/usr/bin/env python3
+
 import cv2
 from cv2 import dnn_superres
 from scipy.ndimage.filters import median_filter
@@ -36,9 +38,10 @@ imw_code = {
     'j100': ([cv2.IMWRITE_JPEG_QUALITY, 100], 'jpg'),
     'png': ([cv2.IMWRITE_PNG_COMPRESSION, 1], 'png'),
     'png3': ([cv2.IMWRITE_PNG_COMPRESSION, 4], 'png'),
+    'png9': ([cv2.IMWRITE_PNG_COMPRESSION, 9], 'png'),
     'wpll': ([cv2.IMWRITE_WEBP_QUALITY, 101], 'webp')
 }
-V_O_EXT = 'png'
+V_O_EXT = 'png9'
 I_O_EXT = 'jpg'
 
 # Create a global SR object
@@ -95,22 +98,35 @@ def sharpen_color(image, sigma, strength):
     return result, dt2
 
 
-def process_pipeline(image, i_name, o_ext):
-    timings_sr = np.array([])
-    timings_us = np.array([])
+def process_pipeline(image, i_name, dt_set):
+    if dt_set.start:
+        o_ext = V_O_EXT
+    else:
+        o_ext = I_O_EXT
+    
+    upscale_lat = ''
+    presharp_lat = ''
+    postsharp_lat = ''
 
+    pipe_t0 = time.time()
     result = image
     # cv2.imshow("Result", result)
     # cv2.waitKey(0)
     # cv2.destroyAllWindows()
-
-    # Unsharp-masking
-    result, dt2 = sharpen_color(result, 1, 0.15)
-    timings_us = np.append(timings_us, dt2)
     
+    # Unsharp-masking (very light)
+    if not dt_set.no_presharp:
+        result, dt = sharpen_color(result, 1, 0.2)
+        presharp_lat = 'presharp {:.{prec}f} sec'.format(dt, prec=2)
+        
     # Upscale the image
-    result, dt1 = sr_up(result)
-    timings_sr = np.append(timings_sr, dt1)
+    result, dt = sr_up(result)
+    upscale_lat = 'upscale {:.{prec}f} sec'.format(dt, prec=2)
+
+    # Post unsharp custom stength
+    if dt_set.postsharpen > 0:
+        result, dt = sharpen_color(result, 1, dt_set.postsharpen)
+        postsharp_lat = 'postsharp {:.{prec}f} sec'.format(dt, prec=2)
 
     # Save final frame    
     workdir = os.getcwd()
@@ -119,13 +135,24 @@ def process_pipeline(image, i_name, o_ext):
 
     if was_wrtn:
         out_hr = '{}_x{}: {}'.format(PRE_BUILT[MOD_NAME], UP_SIZE, i_name)
-        upscale_out = 'upscale {:.{prec}f} sec | avg {:.{prec}f} sec'.format(dt1, np.average(timings_sr), prec=2)
-        unsharp_out = 'unsharp {:.{prec}f} sec | avg {:.{prec}f} sec'.format(dt2, np.average(timings_us), prec=2)
-        print('{}\t\t{}\t\t{}'.format(out_hr, upscale_out, unsharp_out))
+        tot_lat = time.time() - pipe_t0
+        print('{}\t{}\t{}\t{}\ttot_lat: {:.{prec}f}'.
+        format(out_hr, upscale_lat, presharp_lat, postsharp_lat, tot_lat, prec=2))
 
 
-def ext_based_workflows(file_pattern, v_start, v_stop):
+def ext_based_workflows(dt_set):
+    file_pattern = dt_set.file
 
+    if dt_set.start:
+        v_start = int(dt_set.start[0])
+    else:
+        v_start = 0
+    
+    if dt_set.end:
+        v_stop = int(dt_set.end[0])
+    else:
+        v_stop = 0
+    
     for fp in file_pattern:
         ext = fp.split('.')[-1].lower()
 
@@ -133,7 +160,7 @@ def ext_based_workflows(file_pattern, v_start, v_stop):
             # workflow for individual image_files
             image = cv2.imread(fp)
             i_name = '.'.join(fp.split('.')[:-1])
-            process_pipeline(image, i_name, I_O_EXT)
+            process_pipeline(image, i_name, dt_set)
 
         elif ext in ['mp4', 'm4v', 'mkv', 'avi']:
             # workflow for pulling images out of video files (adj requesting frame 1 = 0 secs)
@@ -161,7 +188,7 @@ def ext_based_workflows(file_pattern, v_start, v_stop):
                         break
                     elif count >= v_start:
                         i_name = '{:0>{width}}'.format(count, width=7)
-                        process_pipeline(img, i_name, V_O_EXT)
+                        process_pipeline(img, i_name, dt_set)
                     else:
                         # sequential processing is slow, this section deprecated with set function above
                         print('\r{:>0{width}}'.format(count, width=7))
@@ -179,24 +206,20 @@ def get_cli_args(args):
         help='integer starting frame (videos start at 1 not 0)')
     parser.add_argument('-e', '--end', nargs=1, required=False,
         help='integer ending frame (videos start at 1 not 0)')
+    parser.add_argument('-nx0', '--no-presharp', default=False)
+    parser.add_argument('-ps', '--postsharpen', nargs=1, default='0', help='unsharp strength 0=off 0.7 to 2 make sense')
     parser.add_argument('file', nargs='*',
         help='file_name or file_name_pattern')
-    return parser.parse_args(args)
+    ui_cfg = parser.parse_args(args)
+    try:
+        ui_cfg.postsharpen = float(ui_cfg.postsharpen[0])
+    except:
+        raise
+    return ui_cfg
 
 
 def main(args):
     dt_set = get_cli_args(args)
-
-    file_pattern = dt_set.file
-
-    if dt_set.start:
-        v_start = int(dt_set.start[0])
-    else:
-        v_start = 0
-    if dt_set.end:
-        v_stop = int(dt_set.end[0])
-    else:
-        v_stop = 0
 
     set_sr_model(MOD_NAME, UP_SIZE)
 
@@ -204,7 +227,7 @@ def main(args):
     if not os.path.isdir(M_LABEL):
         os.mkdir(M_LABEL)
 
-    ext_based_workflows(file_pattern, v_start, v_stop)
+    ext_based_workflows(dt_set)
     
     return M_LABEL
 
