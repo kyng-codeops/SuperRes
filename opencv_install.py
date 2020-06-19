@@ -136,7 +136,8 @@ if __name__ == "__main__":
     # Python3 Include path
     py3inc = distutils.sysconfig.get_python_inc()
 
-    # py3bin = '{}/bin/python'.format(os.getenv('VIRTUALENV'))
+    # py3bin = '{}/bin/python'.format(os.getenv('VIRTUALENV'))  
+    # above is not! reliable # also VIRTUAL_ENV, PYENV_VIRTUAL_ENV
     py3bin = subprocess.check_output('which python3', shell=True)
     py3bin = py3bin.decode('utf-8').strip()
 
