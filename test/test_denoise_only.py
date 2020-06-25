@@ -54,7 +54,7 @@ class TestUnits(unittest.TestCase):
         os.chdir(os.path.dirname(os.path.realpath(__file__)))
         print('Working in test directory')
         cmd = ['--debug', '-hL', '2', 'imseq', '-b', '0000008.png', '-e', '0000012.png']
-        # cmd = ['-hL', '2', 'imseq', '-b', '0000008.png', '-e', '0000012.png']
+        cmd = ['-hL', '2', 'imseq', '-b', '0000008.png', '-e', '0000012.png']
         results = denoise_only2.main(cmd)
         for o_file in results:
             self.assertTrue(os.path.isfile(o_file))
