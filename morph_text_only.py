@@ -41,7 +41,7 @@ def main(args):
         default_o_ext=O_EXT
         )
     
-    batch_args = txt_morph.setup_batch()
+    txt_morph.setup_batch()
 
     if debug_mode:
         o_files = txt_morph.serial_pipeline()
