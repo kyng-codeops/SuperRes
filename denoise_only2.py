@@ -14,9 +14,9 @@ class NLmeans(CommandLineUI):
         """
         Custom params for nlmeans denoising with opencv
         """
-        self.parser.add_argument('-hL', '--h-luma', nargs=1, required=False, default=5,
+        self.parser.add_argument('-hl', '--h-luma', nargs=1, required=False, default=5,
             help='integer for h on luma channel denoise')
-        self.parser.add_argument('-hC', '--h-croma', nargs=1, required=False, default=5,
+        self.parser.add_argument('-hc', '--h-croma', nargs=1, required=False, default=5,
             help='integer for h_croma of color denoise')
         self.parser.add_argument('--mp', action='store_true', 
             help='used for special multiprocessing code')
