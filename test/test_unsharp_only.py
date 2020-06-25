@@ -21,7 +21,8 @@ class TestUnits(unittest.TestCase):
     def test_indi_files_cust_ext(self):
         os.chdir(os.path.dirname(os.path.realpath(__file__)))
         print('Working in test directory')
-        cmd = [ '-s', '1', '-m', '0.7', '-o','jpg', 'files', '0000010.png', '0000012.png' ]
+        # cmd = [ '-s', '1', '-m', '0.7', '-ext','jpg', 'files', '0000010.png', '0000012.png' ]
+        cmd = [ '-m', '0.7', '-ext','jpg', 'files', '0000010.png', '0000012.png' ]
         results = unsharp_only.main(cmd)
         for o_file in results:
             self.assertTrue(os.path.isfile(o_file))
