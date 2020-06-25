@@ -1,13 +1,11 @@
 #!/usr/bin/env python3
-
-import cv2
-from scipy.ndimage.filters import median_filter
-import argparse
-import sys
 import os
-import numpy as np
+import sys
 import time
+import argparse
 import concurrent.futures
+import cv2
+
 
 class CommandLineUI(object):
     
@@ -87,12 +85,10 @@ class CommandLineUI(object):
     def ammend_ns(self):
         """
         Overload this class method after overloading ammend_clui(self)
-        to add custom kv pairs to the self.ns.kw_cus_arg dict where the 
-        dictionary is passed to the pipeline module as is, and pipeline will
-        pass thru to the brg_function. The function  should unpack any
-        customizing parameters it needs from the cli input
-        
-        #
+        to add custom kv pairs to the self.ns.kw_cus_arg dictionary.
+        The self.bgr_function should unpack any customizing parameters as
+        needed matching the cli input.
+
         # Example appending built-in instance namespace
         #
         self.ns.kw_cus_arg.update({'h_luma': int(self.ns.h_luma)})
@@ -106,7 +102,7 @@ class CommandLineUI(object):
         sepecific to the bgr_function(self).
 
         # Example overload from denoiser argparse:
-
+        #
         self.parser.add_argument('-hL', '--h-luma', nargs=1, default=5,
             required=False, 
             help='integer for h on luma channel')

@@ -20,7 +20,7 @@ class Unsharp(CommandLineUI):
         result = image - strength * lap
         result[result > 255] = 255
         result[result < 0] = 0
-        
+
         t1 = time.time()
         dt = t1 - t0
         return result, dt
@@ -40,10 +40,9 @@ class Unsharp(CommandLineUI):
     def ammend_ns(self):
         """
         Overload this class method after overloading ammend_clui(self)
-        to add custom kv pairs to the self.ns.kw_cus_arg dict where the 
-        dictionary is passed to the pipeline module as is, and pipeline will
-        pass thru to the brg_function. The function  should unpack any
-        customizing parameters it needs from the cli input
+        to add custom kv pairs to the self.ns.kw_cus_arg dictionary.
+        The self.bgr_function should unpack any customizing parameters as
+        needed matching the cli input.
         """
         self.ns.kw_cus_arg.update({'sigma': int(self.ns.sigma)})
         self.ns.kw_cus_arg.update({'strength': float(self.ns.strength)})
