@@ -5,10 +5,22 @@ import time
 import argparse
 import concurrent.futures
 import cv2
+from abc import ABC, abstractmethod
 
 
-class CommandLineUI(object):
+class CommandLineUI(ABC):
+    """ Extendable prebuilt argparse UI feeding image files and custom
+    parameters to user-defined image manipulation routines. Transformed
+    images can be output in both lossess and highly space efficient lossy
+    formats.  Lossess formats spend more time compressing and writting
+    outputs than actually manipulating images so this class also pre-packages
+    a both a multi-threaded and single-threaded processing facility to process
+    images.
     
+    Usage: 
+    Abtraction methods to override are marked with decorators and
+    docstring code samples.
+    """
     IMW_CODE = {
     'jpg': ([cv2.IMWRITE_JPEG_QUALITY, 87], 'jpg'),
     'j90': ([cv2.IMWRITE_JPEG_QUALITY, 90], 'jpg'),
@@ -19,7 +31,21 @@ class CommandLineUI(object):
     'wpll': ([cv2.IMWRITE_WEBP_QUALITY, 101], 'webp')
     }
 
-    def __init__(self, args, **kwargs):
+    def __init__(self, args: list, **kwargs: dict):
+        """ Requirements to initialize an instance:
+        Required input:
+
+        args            A list of arguments retrived from calling program
+                        like main(sys.argv[1:]) also passed to argparse(args)
+
+        Required keywords:
+
+        description     String to describe the image manipulation
+        default_o_dir   String as a default output folder (only used if -d is 
+                        omitted from user args)
+        default_o_ext   String that is a key entry of cls.IMW_CODE dictionary
+                        (only used when -ext is omitted from user args)
+        """
         self.DESC = kwargs['description']
         self.I_O_DIR = kwargs['default_o_dir']
         self.I_O_EXT = kwargs['default_o_ext']
@@ -34,9 +60,9 @@ class CommandLineUI(object):
 
         self.o_list = []
 
-    def bgr_function(self, image, kv_args):
-        """
-        Overload this class method with your custom function
+    @abstractmethod
+    def bgr_function(self, image: str, kv_args: dict) -> (str, time):
+        """ Override this class method with your custom function
         the self.process_pipeline() class method calls
         
         The custom function must return two variables
@@ -44,23 +70,30 @@ class CommandLineUI(object):
         result: array as the output image
         dt: float as the delta-time taken
         
-        # Example: from denoise added params packaged in kv_args dict
-        #
-        t0 = time.time()
-        hL = kv_args['h_luma']
-        hC = kv_args['h_croma']
-        result = cv2.fastNlMeansDenoisingColored(
-            image, None, hL, hC, 7, 21)
-        dt = time.time() - t0
-        return result, dt
+        # # Example: from denoise added params packaged in kv_args dict
+        # #
+        # t0 = time.time()
+        # hL = kv_args['h_luma']
+        # hC = kv_args['h_croma']
+        # result = cv2.fastNlMeansDenoisingColored(
+        #     image, None, hL, hC, 7, 21)
+        # dt = time.time() - t0
+        # return result, dt
         """
         t0 = time.time()
         result = image
         dt = time.time() - t0
         return result, dt
     
-    def process_pipeline(self, f, kv_args):
-        
+    def process_pipeline(self, f: str, kv_args: dict) -> str:
+        """ Repetitive workflow logistics taking an image filename with
+        parameters. Print UI info and save the a transformed image to a new
+        file in the user designated output folder with the user designated
+        output file type and logging writen fully qualified outputs to a list.
+        This routine does everything except for the actual image manipulation
+        which is handed off to abstractmethod bgr_function(). This method is
+        called by either serial_pipeline() or mthread_pipeline().
+        """
         image = cv2.imread(f)
         result, dt = self.bgr_function(image, kv_args)
 
@@ -82,37 +115,41 @@ class CommandLineUI(object):
             return o_fqn
         return False
 
+    @abstractmethod
     def ammend_ns(self):
-        """
-        Overload this class method after overloading ammend_clui(self)
+        """ Override this class method after overloading ammend_clui(self)
         to add custom kv pairs to the self.ns.kw_cus_arg dictionary.
         The self.bgr_function should unpack any customizing parameters as
         needed matching the cli input.
 
-        # Example appending built-in instance namespace
-        #
-        self.ns.kw_cus_arg.update({'h_luma': int(self.ns.h_luma)})
-        self.ns.kw_cus_arg.update({'h_croma': int(self.ns.h_croma)})
+        # # Example appending built-in instance namespace
+        # #
+        # self.ns.kw_cus_arg.update({'h_luma': int(self.ns.h_luma)})
+        # self.ns.kw_cus_arg.update({'h_croma': int(self.ns.h_croma)})
         """
-        return
+        pass
 
+    @abstractmethod
     def ammend_clui(self):
-        """
-        Overload this class method to extend argparse arguments
+        """ Override this class method to extend argparse arguments
         sepecific to the bgr_function(self).
 
-        # Example overload from denoiser argparse:
-        #
-        self.parser.add_argument('-hL', '--h-luma', nargs=1, default=5,
-            required=False, 
-            help='integer for h on luma channel')
-        self.parser.add_argument('-hC', '--h-croma', nargs=1, default=5,
-            required=False, 
-            help='integer for h_croma of color denoise')
+        # # Example overload from denoiser argparse:
+        # #
+        # self.parser.add_argument('-hL', '--h-luma', nargs=1, default=5,
+        #     required=False, 
+        #     help='integer for h on luma channel')
+        # self.parser.add_argument('-hC', '--h-croma', nargs=1, default=5,
+        #     required=False, 
+        #     help='integer for h_croma of color denoise')
         """
-        return
+        pass
 
     def _reusable_default_clui(self):
+        """ Base common setup for argparse used repeately to ask for files vs
+        beginning:ending image/frame sequence file names along with on-the-fly
+        output folder renaming or output image type customizations.
+        """
         self.parser = argparse.ArgumentParser(description=self.DESC)
         self.parser.add_argument('-ext', '--out-ext', nargs=1, required=False,
             default=self.I_O_EXT,
@@ -138,12 +175,29 @@ class CommandLineUI(object):
             help='example start with 0001.png')
         self.i_parser.add_argument('-e', '--end', nargs=1, 
             help='example end with 0010.png')
-        
-        return
 
-    def setup_batch(self):
+    def _preprocess_cli_ns(self):
+        """ Simplify the argparse namespace self.ns to reduce coding checks on
+        lists vs strings and attribute existance. 
+        Requirements:  self.ns contains dictionary self.ns.kw_cus_arg
         """
-        ns is the namespace output of argparse
+        self.ns = self.parser.parse_args(self.args)
+
+        # flatten namespace single item lists where nargs=1
+        for self.k, self.v in self.ns.__dict__.items():
+            if isinstance(self.v, list):
+                if len(self.v) == 1:
+                    self.ns.__dict__.update({self.k: self.v[0]})
+
+        # For args with defaults to friendly kv
+        self.ns.kw_cus_arg = {'o_ext': self.ns.out_ext}
+        self.ns.kw_cus_arg.update({'o_dir': self.ns.out_dir})
+
+    def setup_batch(self) -> list:
+        """ Process user inputs captured after calling instance instantiation.
+        It generates an interally stored batch list needed before calling one 
+        of two execution processing methods; 
+        serial_pipeline() -or- mthread_pipeline()
         """
         self.im_files_flg = False
         
@@ -170,7 +224,6 @@ class CommandLineUI(object):
                 )
             )
 
-        # self.o_list = []
         self.batch_args = []
 
         if self.im_files_flg:
@@ -191,21 +244,28 @@ class CommandLineUI(object):
                         frame, ext, width=pad)
                     self.batch_args.append(
                         (f_name, self.ns.kw_cus_arg))            
-        
-        return self.batch_args
+        return
 
-    def serial_pipeline(self):
-        # debugging multiprocess in vscode seems to still be a problem            
+    def serial_pipeline(self) -> list:
+        """ Call this after calling setup_batch() as one of two options.
+        Debugging process logic while implementing multiprocessing can be 
+        problematic. Call this to execute logic without multi-threading 
+        (full multi-processing code removed due to complexity perf trade-off).
+        
+        Returns a list of all output files processed and written.
+        """ 
         for b_arg in self.batch_args:
             f, kv_args = [tups for tups in b_arg]
             self.process_pipeline(f, kv_args)
         return self.o_list
 
     def mthread_pipeline(self):
-        # multithread version of self.serial_pipeline()
+        """ Multithread code used to feed and execute self.serial_pipeline()
+        """
         n_proc = min(os.cpu_count(), len(self.batch_args))
         with concurrent.futures.ThreadPoolExecutor(max_workers=n_proc) as executor:
             o_files = executor.map(self._thread_function, range(len(self.batch_args)))
+        
         # reorder all mtime atime from out-of-order processing
         self.o_list.sort()
         chk_f = []
@@ -217,25 +277,11 @@ class CommandLineUI(object):
             return
         return chk_f
 
-    def _thread_function(self, batch_arg_i):
-            tup = self.batch_args[batch_arg_i]
-            return self.process_pipeline(tup[0], tup[1])
-
-    def _preprocess_cli_ns(self):
-        self.ns = self.parser.parse_args(self.args)
-
-        # flatten namespace single item lists where nargs=1
-        for self.k, self.v in self.ns.__dict__.items():
-            if isinstance(self.v, list):
-                if len(self.v) == 1:
-                    self.ns.__dict__.update({self.k: self.v[0]})
-
-        # For args with defaults to friendly kv
-        self.ns.kw_cus_arg = {'o_ext': self.ns.out_ext}
-        self.ns.kw_cus_arg.update({'o_dir': self.ns.out_dir})
-
-        return
-
+    def _thread_function(self, batch_arg_i: int) -> str:
+        """ Proxy function to make threading code legible
+        """
+        tup = self.batch_args[batch_arg_i]
+        return self.process_pipeline(tup[0], tup[1])
 
 # Benchmarking m-p (w/wo class obj) and m-th using nlmeans_denoise imseq
 # 

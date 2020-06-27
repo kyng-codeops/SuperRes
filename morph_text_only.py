@@ -8,6 +8,12 @@ from files_cli_ui import CommandLineUI
 
 class MorphEX(CommandLineUI):
 
+    def ammend_ns(self):
+        pass
+
+    def ammend_clui(self):
+        pass
+
     def bgr_function(self, image, kv_args):
         t0 = time.time()
         

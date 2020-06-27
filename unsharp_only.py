@@ -11,8 +11,23 @@ from files_cli_ui import CommandLineUI
 
 
 class Unsharp(CommandLineUI):
+    """ Image sharpening using the unsharp methodology.
+    Implementation:
+        Initialize object with keyword args for description, 
+            default_o_dir, default_o_ext
+        call setup_batch()
+        call mthead_pipeline() for normal use or searial_pipeline() for dev
+    """
 
-    def sharpen_channel(self, image, sigma, strength):
+    def sharpen_channel(self, image: str, sigma: int, strength: float) -> (str, time):
+        """ Unsharp filter image sharpening for single channel grayscale images.
+        For color images use bgr_function() within this class.
+        
+        Arguments:
+        image       String of the input filename
+        sigma       Int used as kernel footprint size
+        strength    Float defining the strength of sharpening to apply
+        """
         t0 = time.time()
 
         mf_image = median_filter(image, sigma)
@@ -25,7 +40,14 @@ class Unsharp(CommandLineUI):
         dt = t1 - t0
         return result, dt
 
-    def bgr_function(self, image, kv_args):
+    def bgr_function(self, image: str, kv_args: dict) ->(str, time):
+        """ Unsharp filter image sharpening for 3 channel RGB images.
+        In opencv the arrays are arranged as Blue Green Red (BGR).
+        
+        Arguments:
+        image       String of the input filename
+        kv_args     Dictionary with 'sigma'=integer and 'strength'=float
+        """
         sigma = kv_args['sigma']
         strength = kv_args['strength']
         r1 = np.zeros_like(image)
@@ -38,34 +60,26 @@ class Unsharp(CommandLineUI):
         return result, dt2
     
     def ammend_ns(self):
-        """
-        Overload this class method after overloading ammend_clui(self)
-        to add custom kv pairs to the self.ns.kw_cus_arg dictionary.
-        The self.bgr_function should unpack any customizing parameters as
-        needed matching the cli input.
+        """ Unsharp needs sigma as integer and strength as float
         """
         self.ns.kw_cus_arg.update({'sigma': int(self.ns.sigma)})
         self.ns.kw_cus_arg.update({'strength': float(self.ns.strength)})
-        return
 
     def ammend_clui(self):
-        """
-        Overload this class method to extend argparse arguments
-        sepecific to the bgr_function(self).
+        """  Unsharp needs two paramaters, sigma and strength.
+        sigma defaults to 1 while strength defaults to 0.7
         """
         self.parser.add_argument('-s', '--sigma', nargs=1, default=1,
             help='integer for sigma of sharpening')
         self.parser.add_argument('-m', '--strength', nargs=1, default=0.7,
             help='float for strength of sharpening .7 is very light 10 too much')
-    
-        return
 
 
 DESC = 'Unsharp mask sharpening with opencv Laplacian'
 O_DIR = 'Unsharp_out'
 O_EXT = 'pn9'
 
-def main(args):
+def main(args: list) -> list:
     debug_mode = False
     if '--debug' in args:
         debug_mode = True

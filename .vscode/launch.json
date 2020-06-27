@@ -17,11 +17,11 @@
             "request": "launch",
             "program": "${workspaceFolder}/morph_text_only.py",
             "console": "integratedTerminal",
-            "cwd": "${workspaceFolder}/../../../../../Volumes/data2/new_imgs/denoising_title",
+            "cwd": "${workspaceFolder}/test",
             "args": [
                 "-d", "LetterFix",
                 "files",
-                "jedi*075*.png"
+                "000*.png"
             ]
         },
     ]
