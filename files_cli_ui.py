@@ -277,10 +277,10 @@ class CommandLineUI(ABC):
             return
         return chk_f
 
-    def _thread_function(self, batch_arg_i: int) -> str:
+    def _thread_function(self, i: int) -> str:
         """ Proxy function to make threading code legible
         """
-        tup = self.batch_args[batch_arg_i]
+        tup = self.batch_args[i]
         return self.process_pipeline(tup[0], tup[1])
 
 # Benchmarking m-p (w/wo class obj) and m-th using nlmeans_denoise imseq

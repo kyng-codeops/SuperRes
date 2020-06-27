@@ -10,7 +10,9 @@ import denoise_only2
 
 HOMEDIR = os.getenv('HOME')
 
-class TestUnits(unittest.TestCase):
+class TestNonClassUnits(unittest.TestCase):
+    """ Test original versions before OOP conversion
+    """
 
     def test_nonclassed_denoise_imseq(self):
         """ Specify -hL with imseq -b nad -e
@@ -37,6 +39,10 @@ class TestUnits(unittest.TestCase):
             self.assertTrue(os.path.isfile(o_file))
             os.remove(o_file)
 
+
+class TestClassUnits(unittest.TestCase):
+    """ Test versions of code that implement OOP
+    """
 
     def test_obj_denoise_indi_files(self):
         """ Creating reusable interface with denoise as template
