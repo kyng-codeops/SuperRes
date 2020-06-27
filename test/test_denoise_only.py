@@ -12,52 +12,57 @@ HOMEDIR = os.getenv('HOME')
 
 class TestUnits(unittest.TestCase):
 
-    def test_imseq(self):
-        """
-        Default -hC output type and output directory but override -hL
+    def test_nonclassed_denoise_imseq(self):
+        """ Specify -hL with imseq -b nad -e
+        default -hC -o/ext and -d
         """
         os.chdir(os.path.dirname(os.path.realpath(__file__)))
-        print('Working in test directory')
-        cmd = ['-hL', '2', 'imseq', '-b', '0000008.png', '-e', '0000012.png']
+        print('\nWorking in test directory')
+        cmd = [ '-hL', '2', 'imseq', '-b', '0000008.png', '-e', '0000012.png' ]
         results = denoise_only.main(cmd)
         for o_file in results:
             self.assertTrue(os.path.isfile(o_file))
+            os.remove(o_file)
         
-    def test_indi_files_cust_ext(self):
-        """
-        Default -hL but override output file type and output directory
+    def test_nonclassed_denoise_files(self):
+        """ Specify -hC -o/ext -d and files
+        default -hL
         """
         os.chdir(os.path.dirname(os.path.realpath(__file__)))
-        print('Working in test directory')
-        cmd = [ '-hC', '2', '-o','jpg', '-d', 'NewDenoise', 'files', '0000010.png', '0000012.png' ]
+        print('\nWorking in test directory')
+        cmd = [ '-hC', '2', '-o','jpg', '-d', 'NewDenoise', 
+                'files', '0000010.png', '0000012.png' ]
         results = denoise_only.main(cmd)
         for o_file in results:
             self.assertTrue(os.path.isfile(o_file))
+            os.remove(o_file)
 
 
     def test_obj_denoise_indi_files(self):
-        """
-        Creating reusable interface with denoise as template
+        """ Creating reusable interface with denoise as template
         Default -hL but override output file type and output directory
         """
         os.chdir(os.path.dirname(os.path.realpath(__file__)))
-        print('Working in test directory')
-        cmd = [ '-hc', '2', '-ext','jpg', '-d', 'NewDenoise', 'files', '0000010.png', '0000012.png' ]
+        print('\nWorking in test directory')
+        cmd = [ '-hc', '2', '-ext','jpg', '-d', 'NewDenoise', 'files', 
+                '0000010.png', '0000012.png' ]
         results = denoise_only2.main(cmd)
         for o_file in results:
             self.assertTrue(os.path.isfile(o_file))
+            os.remove(o_file)
     
-    def test_obj_imseq(self):
-        """
-        Default -hC output type and output directory but override -hL
+    def test_obj_denoise_imseq(self):
+        """ Default -hC output type and output directory but override -hL
         """
         os.chdir(os.path.dirname(os.path.realpath(__file__)))
-        print('Working in test directory')
-        cmd = ['--debug', '-hl', '2', 'imseq', '-b', '0000008.png', '-e', '0000012.png']
-        cmd = ['-hl', '2', 'imseq', '-b', '0000008.png', '-e', '0000012.png']
+        print('\nWorking in test directory')
+        cmd = [ '--debug', '-hl', '2', 'imseq', 
+                '-b', '0000008.png', '-e', '0000012.png']
+        cmd = [ '-hl', '2', 'imseq', '-b', '0000008.png', '-e', '0000012.png' ]
         results = denoise_only2.main(cmd)
         for o_file in results:
             self.assertTrue(os.path.isfile(o_file))
+            os.remove(o_file)
 
 
 if __name__ == '__main__':
