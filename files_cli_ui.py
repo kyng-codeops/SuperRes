@@ -6,6 +6,7 @@ import argparse
 import concurrent.futures
 import cv2
 from abc import ABC, abstractmethod
+import collections
 
 
 class CommandLineUI(ABC):
@@ -58,7 +59,7 @@ class CommandLineUI(ABC):
         self._preprocess_cli_ns()
         self.ammend_ns()
 
-        self.o_list = []
+        self.o_list = collections.deque([])
 
     @abstractmethod
     def bgr_function(self, image: str, kv_args: dict) -> (str, time):
@@ -111,7 +112,7 @@ class CommandLineUI(ABC):
         if was_wrtn:
             pl_out = 'processed {:.{prec}f} sec'.format(dt, prec=2)
             print('output\t{}:\t{}'.format(f, pl_out))
-            self.o_list.append(o_fqn)
+            self.o_list.append(o_fqn)   # o_list is a deque for thread safety
             return o_fqn
         return False
 
@@ -267,13 +268,12 @@ class CommandLineUI(ABC):
             o_files = executor.map(self._thread_function, range(len(self.batch_args)))
         
         # reorder all mtime atime from out-of-order processing
-        self.o_list.sort()
         chk_f = []
         for out_f in o_files:
             os.utime(out_f)
             chk_f.append(out_f)
-        if chk_f != self.o_list:
-            print('WARNING: o_list possibly mangled by race condition')
+        if chk_f != sorted(self.o_list):
+            print('WARNING: deque(o_list) possibly mangled by race condition')
             return
         return chk_f
 
