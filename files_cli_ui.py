@@ -12,11 +12,10 @@ import collections
 class CommandLineUI(ABC):
     """ Extendable prebuilt argparse UI feeding image files and custom
     parameters to user-defined image manipulation routines. Transformed
-    images can be output in both lossess and highly space efficient lossy
-    formats.  Lossess formats spend more time compressing and writting
+    images can be output in both lossless and highly space efficient lossy
+    formats.  Lossless formats spend more time compressing and writting
     outputs than actually manipulating images so this class also pre-packages
-    a both a multi-threaded and single-threaded processing facility to process
-    images.
+    both a multi-threaded and single-threaded image processing methods.
     
     Usage: 
     Abtraction methods to override are marked with decorators and
