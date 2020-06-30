@@ -38,13 +38,13 @@ class TestUnits(unittest.TestCase):
         # os.chdir('test')
         fn = 'Han Shoots Greedo.mp4'
         cmd = [
-            fn,
+            fn, '-d', 'My_Upscale',
             '-s', '8',
             '-e', '16',
-            '--postsharpen', '0.7'
+            '--postsharpen', '.7', '-x0', '.1'
         ]
         result = dnn_pb_upscaler_unsharp.main(cmd)
-        output = '{}/{:0>{width}}.*'.format(result, int(cmd[2]), width=7)
+        output = '{}/{:0>{width}}.*'.format(result, int(cmd[4]), width=7)
         file = glob.glob(output)
         # check first file exists
         o_ext = file[0].split('.')[-1]
