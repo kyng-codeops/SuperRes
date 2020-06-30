@@ -87,12 +87,13 @@ class CommandLineUI(ABC):
     
     def process_pipeline(self, f: str, kv_args: dict) -> str:
         """ Repetitive workflow logistics taking an image filename with
-        parameters. Print UI info and save the a transformed image to a new
-        file in the user designated output folder with the user designated
-        output file type and logging writen fully qualified outputs to a list.
+        parameters; print UI info; save the transformed image to a new
+        file in a user designated output folder with user designated output
+        file type; log the writen file's fully qualified outputs to a 
+        thread-safe deque.
         This routine does everything except for the actual image manipulation
-        which is handed off to abstractmethod bgr_function(). This method is
-        called by either serial_pipeline() or mthread_pipeline().
+        which is handed off to abstractmethod bgr_function()--which is called
+        by either serial_pipeline() or mthread_pipeline().
         """
         image = cv2.imread(f)
         result, dt = self.bgr_function(image, kv_args)
@@ -184,10 +185,10 @@ class CommandLineUI(ABC):
         self.ns = self.parser.parse_args(self.args)
 
         # flatten namespace single item lists where nargs=1
-        for self.k, self.v in self.ns.__dict__.items():
-            if isinstance(self.v, list):
-                if len(self.v) == 1:
-                    self.ns.__dict__.update({self.k: self.v[0]})
+        for k, v in self.ns.__dict__.items():
+            if isinstance(v, list):
+                if len(v) == 1:
+                    self.ns.__dict__.update({k: v[0]})
 
         # For args with defaults to friendly kv
         self.ns.kw_cus_arg = {'o_ext': self.ns.out_ext}
