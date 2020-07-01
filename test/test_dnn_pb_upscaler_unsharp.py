@@ -33,26 +33,41 @@ class TestUnits(unittest.TestCase):
         output = '{}/{}'.format(result, '001.jpg')
         self.assertTrue(os.path.isfile(output))
 
-    def test_main_args_video(self):
+
+class TestVideoExtraction(unittest.TestCase):
+    
+    def test_main_args_video_range(self):
+        os.chdir(os.path.dirname(os.path.realpath(__file__)))
+        # os.chdir('test')
+        fn = 'Han Shoots Greedo.mp4'
+        start = '8'
+        end = '12'
+        cmd = [
+            fn, '-d', 'My_Upscale',
+            '-s', start,
+            '-e', end, '-ext', 'jpg',
+            '-x1', '.8', '-x0', '0'
+        ]
+        result = dnn_pb_upscaler_unsharp.main(cmd)
+        files = []
+        for i in range(int(start), int(end) + 1, 1):
+            output = '{}/{:0>{width}}.jpg'.format(result, i, width=7)
+            self.assertTrue(os.path.isfile(output))
+    
+    def test_main_args_video_end(self):
         os.chdir(os.path.dirname(os.path.realpath(__file__)))
         # os.chdir('test')
         fn = 'Han Shoots Greedo.mp4'
         cmd = [
             fn, '-d', 'My_Upscale',
-            '-s', '8',
-            '-e', '16',
-            '--postsharpen', '.7', '-x0', '.1'
+            '-ext', 'png',
+            '-x1', '.8', '-x0', '.1', '-e', '8'
         ]
         result = dnn_pb_upscaler_unsharp.main(cmd)
-        output = '{}/{:0>{width}}.*'.format(result, int(cmd[4]), width=7)
-        file = glob.glob(output)
-        # check first file exists
-        o_ext = file[0].split('.')[-1]
-        self.assertTrue(os.path.isfile(file[0]))
-        
-        # check last file exists
-        output = '{}/{:0>{width}}.{}'.format(result, int(cmd[4]), o_ext, width=7)
-        self.assertTrue(os.path.isfile(output))
+        self.assertTrue(os.path.isdir(result))
+        os.chdir(result)
+        files = glob.glob('*.png')
+        self.assertTrue(len(files) > 0)
 
 
 if __name__ == '__main__':

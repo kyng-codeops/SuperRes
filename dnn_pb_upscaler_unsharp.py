@@ -51,21 +51,30 @@ sr = dnn_superres.DnnSuperResImpl_create()
 # before = img.shape()
 # after = result.shape()
 
-def set_sr_model(model, scale):
-    # TODO: currently unable to compile opencv for CUDA on macOS 10.15.x
-    # CUDA driver and toolkit support problems on macOS mojave
-    # net.setPreferableBackend(cv2.dnn.DNN_BACKEND_CUDA)
-    # net.setPreferableTarget(cv2.dnn.DNN_TARGET_CUDA)
-    m_fname = '{}_x{}.pb'.format(PRE_BUILT[model], scale)
-    m_fqp = os.path.dirname(os.path.realpath(__file__))
-    m_fqn = '{}/{}'.format(m_fqp, m_fname)
-    # M_LABEL = M_FQN.split('/')[-1].split('.')[0]
-    sr.readModel(m_fqn)
-    sr.setModel(model, scale)
-    # TODO: FSRCNN has been ported to tf, will need to port tf to keras for GPU run (next line runs keras on GPU)
-    # plaidml.keras.install_backend()
+def plaidml_decorator(func):
+    def wrapper(*args, **kwargs):
+        """ FSRCNN has been ported to tf, will need to port tf to keras 
+        for GPU run (next line runs keras on GPU)
+        TODO: Not tested yet!!
+        """
+        plaidml.keras.install_backend()
+        func(*args, **kwargs)
+        return func(*args, **kwargs)
+    return wrapper
 
-def time_it(func):
+def cuda_decorator(func):
+    def wrapper(*args, **kwargs):
+        """ TODO: currently unable to compile opencv for CUDA on macOS 10.15.x
+        CUDA driver and toolkit support problems on macOS mojave
+        TODO: Not tested yet!!
+        """
+        net.setPreferableBackend(cv2.dnn.DNN_BACKEND_CUDA)
+        net.setPreferableTarget(cv2.dnn.DNN_TARGET_CUDA)
+        func(*args, **kwargs)
+        return func(*args, **kwargs)
+    return wrapper
+
+def time_it_decorator(func):
     def wrapper(*args, **kwargs):
         t0 = time.time()
         func(*args, **kwargs)
@@ -73,23 +82,36 @@ def time_it(func):
         return func(*args, **kwargs), dt
     return wrapper
 
+def set_sr_model(model, scale):
+    """ Load DNN SuperResolution model
+    Wrap this function with the @cuda_decorator or @plaidml_decorator to
+    run SR on GPU.. or selectively run with call wrapping
+    """
+    m_fname = '{}_x{}.pb'.format(PRE_BUILT[model], scale)
+    m_fqp = os.path.dirname(os.path.realpath(__file__))
+    m_fqn = '{}/{}'.format(m_fqp, m_fname)
+    sr.readModel(m_fqn)
+    sr.setModel(model, scale)    
+
 def sharpen_channel_laplacian(image, sigma, strength):
-    """ sharpen a monochromatic image array
+    """ Sharpen a 1-D image array (grayscale or single color)
     """
     mf_image = median_filter(image, sigma)
     lap = cv2.Laplacian(mf_image, cv2.CV_64F)
     result = image - strength * lap
-    # clip_hi = np.amax(result)
-    # clip_lo = np.amin(result)
-    # if clip_lo < 0 or clip_hi > 255:
-    #     print('sharpen filter cliping: hi_val {} lo_val {}'.format(
-    #         clip_hi, clip_lo ))
+    """ Even mild sharpening always causes clipping
+    clip_hi = np.amax(result)
+    clip_lo = np.amin(result)
+    if clip_lo < 0 or clip_hi > 255:
+        print('sharpen filter cliping: hi_val {} lo_val {}'.format(
+            clip_hi, clip_lo ))
+    """
     result[result > 255] = 255
     result[result < 0] = 0
     return result
 
 def sharpen_color_laplacian(image, sigma, strength):
-    """ sharpen a 3 color image array
+    """ sharpen a 3 color image array one channel at a time
     """
     result = np.zeros_like(image)
     for i in range(3):
@@ -100,9 +122,37 @@ def sharpen_color_guasian(image, alpha, beta, gamma):
     # alpha = 1.5
     # beta = -0.5
     # gamma = 0
-    blur = cv2.GaussianBlur(image, cv2.Size(0, 0), 3)
+    # FIXME: Not implemented correctly... just blurring images
+    blur = cv2.GaussianBlur(image, (0, 0), 3)
     result = cv2.addWeighted(blur, alpha, image, beta, gamma)
     return result
+
+def sharpen_hsv_saturation(image, sigma, strength):
+    """ Described in medical imaging journals to help medical diags.
+    OpenCV hue ranges are [0-179] while saturation and values are [0-255]
+    cv2.COLOR_BGR2HSV_FULL scales hue to [0-255] for compatibility outside
+    of cv2 tool.
+    # FIXME: Not very applicable to movies and home photo sharpening
+    """ 
+    hsv_image = cv2.cvtColor(image, cv2.COLOR_BGR2HSV)
+    hsv_image[:, :, 1] = sharpen_channel_laplacian(hsv_image[:, :, 1], sigma, strength)
+    result = cv2.cvtColor(hsv_image, cv2.COLOR_HSV2BGR)
+    return result
+
+def sharpen_kern_filter(image):
+    filter = np.array([[-1, -1, -1], [-1, 9, -1], [-1, -1, -1]])
+    result = cv2.filter2D(image,-1,filter)
+    return result
+
+def blur_detection(image):
+    """ Variance of the Laplacian gives a good score to determine how
+    sharp an image might be. Observations indicate 000s is HD while
+    most scores below 80-100 are often low quality.
+    Future work: Consider a normalized score rel img size?
+    """
+    gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
+    score = cv2.Laplacian(gray, cv2.CV_64F).var()
+    return score
 
 def process_pipeline(image, i_name, dt_set):
     # if dt_set.start:
@@ -118,6 +168,9 @@ def process_pipeline(image, i_name, dt_set):
     pipe_t0 = time.time()
     result = image
     
+    lpc_score = blur_detection(result)
+    stage_dts.append('origLpcVar:{:.0f}'.format(round(lpc_score)))
+
     """ autocrop black boarders """
     if dt_set.autocrop:
         gray = cv2.cvtColor(result, cv2.COLOR_BGR2GRAY)
@@ -150,7 +203,7 @@ def process_pipeline(image, i_name, dt_set):
     if dt_set.pre_denoise > 0:
         # pre SR denoising 1, 1 should just deblock or rm small noise
         hlc = int(dt_set.pre_denoise)
-        run_decorator = time_it(cv2.fastNlMeansDenoisingColored)
+        run_decorator = time_it_decorator(cv2.fastNlMeansDenoisingColored)
         result, dt = run_decorator(result, None, hlc, hlc, 7, 21)
         stage_dts.append('nlmeans {:.2f}s'.format(dt))
 
@@ -162,18 +215,24 @@ def process_pipeline(image, i_name, dt_set):
 
     if dt_set.presharp > 0:
         # pre SR shouldn't use more the 0.1
-        run_decorator = time_it(sharpen_color_laplacian)
+        run_decorator = time_it_decorator(sharpen_color_laplacian)
         result, dt = run_decorator(result, 1, dt_set.presharp)
         stage_dts.append('sharpen {:.{prec}f}s'.format(dt, prec=2))
     
     """ Upscale the image """
     # result, dt = sr_up(result)
-    run_decorator = time_it(sr.upsample)
+    run_decorator = time_it_decorator(sr.upsample)
     result, dt = run_decorator(result)
-    stage_dts.append('upscale {:.2f}s'.format(dt))
+    stage_dts.append('SupRes {:.2f}s'.format(dt))
+    lpc_score = blur_detection(result)
+    stage_dts.append('lpcVar:{:.0f}'.format(lpc_score))
 
-    # try minimal post SR denoising as well
-    # result = cv2.fastNlMeansDenoisingColored(result, None, 1, 1, 7, 21)
+    """ Post nlmeans denoising """
+    if dt_set.postdenoise > 0:
+        run_decorator = time_it_decorator(cv2.fastNlMeansDenoisingColored)
+        h = dt_set.postdenoise
+        result, dt = run_decorator(result, None, h, h, 7, 21)
+        stage_dts.append('nlmeans {:.{prec}f}s'.format(dt, prec=2))
 
     # # try inpainting edges as a way to denoise?
     # edge = cv2.Canny(result, 50, 100)
@@ -183,9 +242,19 @@ def process_pipeline(image, i_name, dt_set):
 
     # Post unsharp custom stength
     if dt_set.postsharpen > 0:
-        run_decorator = time_it(sharpen_color_laplacian)
+        run_decorator = time_it_decorator(sharpen_color_laplacian)
         result, dt = run_decorator(result, 1, dt_set.postsharpen)
         stage_dts.append('sharpen {:.{prec}f}s'.format(dt, prec=2))
+        lpc_score = blur_detection(result)
+        stage_dts.append('lpcVar:{:.0f}'.format(round(lpc_score)))
+    if dt_set.postsharpen2 > 0:
+        run_decorator = time_it_decorator(sharpen_kern_filter)
+        # result, dt = run_decorator(result, 1, dt_set.postsharpen2)
+        # stage_dts.append('sharpen_Sat {:.{prec}f}s'.format(dt, prec=2))
+        result, dt = run_decorator(result)
+        stage_dts.append('sharpen_kernel {:.{prec}f}s'.format(dt, prec=2))
+        lpc_score = blur_detection(result)
+        stage_dts.append('lpcVar:{:.0f}'.format(round(lpc_score)))
 
     # cv2.imshow('post-sharpen', result)
     # cv2.waitKey(0)
@@ -210,13 +279,16 @@ def ext_based_workflows(dt_set):
     if dt_set.start:
         v_start = int(dt_set.start)
     else:
-        v_start = 0
+        v_start = 1
     
     if dt_set.end:
         v_stop = int(dt_set.end)
     else:
         v_stop = 0
     
+    p_frame_thresh = 300000
+    back_scan_offset = 2
+
     for fp in file_pattern:
         ext = fp.split('.')[-1].lower()
 
@@ -243,9 +315,54 @@ def ext_based_workflows(dt_set):
                 if not grab_frame_stat:
                     print('Unable to decode video frame from [{}] at frame {}'.format(fp, v_start))
                     if v_stream.isOpened():
-                        print('Did you forget to install ffmpeg and its dependencies before building opencv?')
+                        print('Did you install ffmpeg before building opencv?')
                     else:
                         print('v_stream not even able to open')
+                if v_start > 1:
+                    
+                    """ Test prev frame to see if current frame is P frame? """
+                    v_stream.set(cv2.CAP_PROP_POS_FRAMES, v_start - back_scan_offset)
+                    grab_frame_stat, img_pre = v_stream.read()
+                    while grab_frame_stat:
+                        diff = cv2.absdiff(img, img_pre)
+                        non_zero_count = np.count_nonzero(diff)
+                        # TODO: scan and detect which frames have scene transitions..
+                        # TODO: select diff SR model for dark upscale + enhanced contrast
+                        # TODO: re-analyze blur, pre-post filter settings on scene changes?
+                        # TODO: create a transfer-learning repo w lables and features?
+                        # Scene change can be detected with histogram median shifts
+                        # And light/dark scenes can be detected with shift in normalized
+                        # median luma level shifting
+                        # h1gray = cv2.calcHist(img, [0], None, [24],[0, 255])
+                        # h2gray = cv2.calcHist(img_pre, [0], None, [24],[0, 255])                        
+                        if v_start - back_scan_offset < 0:
+                            break
+                        elif non_zero_count > p_frame_thresh:
+                            """ This method of guessing P-frames is a borrowed hack
+                            That has shown to work and saved a bit of frustration
+                            """
+                            back_scan_offset += 1
+                            img = img_pre
+                            v_stream.set(cv2.CAP_PROP_POS_FRAMES, v_start - back_scan_offset)
+                            grab_frame_stat, img_pre = v_stream.read()
+                        else:
+                            break
+                    
+                    """ math-wise the if != 2 does the same thing as == 2 block """
+                    if back_scan_offset == 2:
+                        """ if non-P frame reset to original start """
+                        v_stream.set(cv2.CAP_PROP_POS_FRAMES, v_start-1)
+                        grab_frame_stat, img = v_stream.read()
+                    else:
+                        """ skip back and scan forward """
+                        m1 = 'User selected frame might be a P-Frame:'
+                        m2 = 'pre-scanned {} frames'.format(back_scan_offset)
+                        print(m1 + m2)
+                        new_start = v_start - (back_scan_offset - 1)
+                        v_stream.set(cv2.CAP_PROP_POS_FRAMES, new_start)
+                        for trash in range(new_start, v_start, 1):
+                            grab_frame_stat, img = v_stream.read()
+                """ start normal frame retrieval process """
                 count = v_start
                 while grab_frame_stat:
                     if count > v_stop:
@@ -263,7 +380,6 @@ def ext_based_workflows(dt_set):
             except ZeroDivisionError:
                 print('Could not get video duration.')
                 pass
-
 
 def get_cli_args(args):
     parser = argparse.ArgumentParser(description='Upconvert a video or image(s) using NN SR.')
@@ -283,8 +399,12 @@ def get_cli_args(args):
         help='pre upscale sharpening strength 0=off 0.1 to 0.2 make sense')
     parser.add_argument('-nl0', '--pre-denoise', nargs=1, default=0,
         help='pre upscale nlmeans denoising hC=hL integer')
+    parser.add_argument('-nl1', '--postdenoise', nargs=1, default=0,
+        help='post upscale nlmeans denoising hC=hL integer')        
     parser.add_argument('-x1', '--postsharpen', nargs=1, default='0', 
-        help='unsharp strength 0=off 0.7 to 2 make sense')
+        help='unsharp RGB strength 0=off 0.7 to 2 make sense')
+    parser.add_argument('-x2', '--postsharpen2', nargs=1, default='0', 
+        help='unsharp HSV saturation strength 0=off 0.7 to 2 make sense')
     parser.add_argument('file', nargs='*',
         help='file_name or file_name_pattern')
     ns = parser.parse_args(args)
@@ -294,31 +414,37 @@ def get_cli_args(args):
             if len(v) == 1:
                 ns.__dict__.update({k: v[0]})
 
-    # For args with defaults to friendly kv
+    # For args with defaults add kv ease passing args in pipeline
     ns.kw_cus_arg = {'o_ext': ns.out_ext}
     ns.kw_cus_arg.update({'o_dir': ns.out_dir})
 
     try:
         ns.postsharpen = float(ns.postsharpen)
+        ns.postsharpen2 = float(ns.postsharpen2)
         ns.presharp = float(ns.presharp)
         ns.pre_denoise = int(ns.pre_denoise)
+        ns.postdenoise = int(ns.postdenoise)
     except:
         raise
     return ns
 
 
 def main(args):
+    # gather user cli options
     ns = get_cli_args(args)
-
+    
+    # @decorate this target function or manually wrap next line for gpu
     set_sr_model(MOD_NAME, UP_SIZE)
     
+    # Create a subfolder for output
     o_dir = ns.kw_cus_arg['o_dir']
-    # Create a subfolder for output using model label name with x factor
     if not os.path.isdir(o_dir):
         os.mkdir(o_dir)
 
+    # Start the image file or video file workflow
     ext_based_workflows(ns)
     
+    # Let the calling function know where outputs were written
     return o_dir
 
 if __name__ == "__main__":
