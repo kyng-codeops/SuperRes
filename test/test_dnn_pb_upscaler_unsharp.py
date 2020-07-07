@@ -27,11 +27,13 @@ class TestUnits(unittest.TestCase):
     def test_main_args_image(self):
         os.chdir(os.path.dirname(os.path.realpath(__file__)))
         # os.chdir('test')
-        fn = '001.png'
-        cmd = [ fn ]
+        fn = glob.glob('*.png')
+        cmd = [ '-x0', '.2', '-ext', 'jpg' ] + fn
         result = dnn_pb_upscaler_unsharp.main(cmd)
-        output = '{}/{}'.format(result, '001.jpg')
-        self.assertTrue(os.path.isfile(output))
+        self.assertTrue(os.path.isdir(result))
+        os.chdir(result)
+        files = glob.glob('*.jpg')
+        self.assertTrue(len(files) > 0)
 
 
 class TestVideoExtraction(unittest.TestCase):

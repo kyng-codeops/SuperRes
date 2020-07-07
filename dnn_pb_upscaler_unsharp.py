@@ -288,6 +288,7 @@ def ext_based_workflows(dt_set):
     
     p_frame_thresh = 300000
     back_scan_offset = 2
+    count = 0
 
     for fp in file_pattern:
         ext = fp.split('.')[-1].lower()
@@ -296,7 +297,10 @@ def ext_based_workflows(dt_set):
             # workflow for individual image_files
             image = cv2.imread(fp)
             i_name = '.'.join(fp.split('.')[:-1])
+            count += 1
+            dt_set.pct_done = float(count - 0)/(len(file_pattern) - 0)*100
             process_pipeline(image, i_name, dt_set)
+            
 
         elif ext in ['mp4', 'm4v', 'mkv', 'avi']:
             # workflow for pulling images out of video files (adj requesting frame 1 = 0 secs)
