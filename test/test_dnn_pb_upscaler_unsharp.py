@@ -14,24 +14,25 @@ class TestUnits(unittest.TestCase):
     def test_get_cli_args(self):
         os.chdir(os.path.dirname(os.path.realpath(__file__)))
         fn = 'test_vid.mkv'
+        fn = 'Han Shoots Greedo.mp4'
         cmd = [
             fn,
-            '-s', '5',
+            '-s', '1',
             '-e', '10'
         ]
         result = dnn_pb_upscaler_unsharp.get_cli_args(cmd)
         self.assertEqual(result.file[0], cmd[0])
-        self.assertEqual(result.start[0], cmd[2])
-        self.assertEqual(result.end[0], cmd[4])
+        self.assertEqual(result.start, cmd[2])
+        self.assertEqual(result.end, cmd[4])
 
     def test_main_args_image(self):
         os.chdir(os.path.dirname(os.path.realpath(__file__)))
         # os.chdir('test')
-        fn = '001.png'
+        fn = 'none.png'
         cmd = [ fn ]
         result = dnn_pb_upscaler_unsharp.main(cmd)
         output = '{}/{}'.format(result, '001.jpg')
-        self.assertTrue(os.path.isfile(output))
+        self.assertFalse(os.path.isfile(output))
 
 
 class TestVideoExtraction(unittest.TestCase):

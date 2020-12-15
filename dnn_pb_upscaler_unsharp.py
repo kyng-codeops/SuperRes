@@ -31,6 +31,7 @@ M_LABEL = M_FQN.split('/')[-1].split('.')[0]
 # j100 is fast but still using lossly schema (noise can propagate thru pipelines)
 # png 0-9, default is 1 (fastest), 3 tested fair trade-off speed/size
 # WebP 0-100, >100 triggers lossless (and as slow as png set to 9)
+# ffv1 writes a lossless mkv video output file while avc1 is lossy but faster & smaller
 imw_code = {
     'jpg': ([cv2.IMWRITE_JPEG_QUALITY, 87], 'jpg'),
     'j90': ([cv2.IMWRITE_JPEG_QUALITY, 90], 'jpg'),
@@ -302,9 +303,12 @@ def ext_based_workflows(dt_set):
 
         if ext in ['jpg', 'jpeg', 'png']:
             # workflow for individual image_files
-            image = cv2.imread(fp)
-            i_name = '.'.join(fp.split('.')[:-1])
-            process_pipeline(image, i_name, dt_set)
+            if os.path.isfile(fp):
+                image = cv2.imread(fp)
+                i_name = '.'.join(fp.split('.')[:-1])
+                process_pipeline(image, i_name, dt_set)
+            else:
+                print('file: {} does not exist'.format(fp))
 
         elif ext in ['mp4', 'm4v', 'mkv', 'avi']:
             # workflow for pulling images out of video files (adj requesting frame 1 = 0 secs)
