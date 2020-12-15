@@ -13,7 +13,7 @@ import argparse
 
 cv2.ocl.setUseOpenCL(True)
 
-MOD_NAME = 'lapsrn'
+MOD_NAME = 'espcn'
 UP_SIZE = 4
 HOMEDIR = os.getenv('HOME')
 PRE_BUILT = {
@@ -38,7 +38,9 @@ imw_code = {
     'png': ([cv2.IMWRITE_PNG_COMPRESSION, 1], 'png'),
     'png3': ([cv2.IMWRITE_PNG_COMPRESSION, 4], 'png'),
     'png9': ([cv2.IMWRITE_PNG_COMPRESSION, 9], 'png'),
-    'wpll': ([cv2.IMWRITE_WEBP_QUALITY, 101], 'webp')
+    'wpll': ([cv2.IMWRITE_WEBP_QUALITY, 101], 'webp'),
+    'avc1': (cv2.VideoWriter_fourcc(*'avc1'), 'mp4'),
+    'ffv1': (cv2.VideoWriter_fourcc(*'FFV1'), 'mkv')
 }
 V_O_EXT = 'png9'
 I_O_EXT = 'jpg'
@@ -261,9 +263,15 @@ def process_pipeline(image, i_name, dt_set):
     # cv2.destroyAllWindows()
 
     # Save final frame    
-    workdir = os.getcwd()
-    o_path = '{}/{}/{}.{}'.format(workdir, dt_set.out_dir, i_name, imw_code[o_ext][1])
-    was_wrtn = cv2.imwrite(o_path, result, imw_code[o_ext][0])
+    try:
+        # try using video output object and fall back to imwrite
+        was_wrtn = dt_set.vout.write(result)
+        if was_wrtn is None:
+            was_wrtn = True
+    except AttributeError:
+        workdir = os.getcwd()
+        o_path = '{}/{}/{}.{}'.format(workdir, dt_set.out_dir, i_name, imw_code[o_ext][1])
+        was_wrtn = cv2.imwrite(o_path, result, imw_code[o_ext][0])
 
     if was_wrtn:
         out_hr = '[{:.{prec}f}%] {}_x{}: {}'.format(
@@ -305,11 +313,26 @@ def ext_based_workflows(dt_set):
                 tot_frames = v_stream.get(cv2.CAP_PROP_FRAME_COUNT)
                 if v_stop == 0:
                     v_stop = tot_frames
-                # fps = v_stream.get(cv2.CAP_PROP_FPS)
-                # tot_time_sec = tot_frames/fps
-                # v_start_sec = (v_start-1)/fps
-                # start_time_code = v_start_sec/tot_time_sec
-                # zero_idx_time_code = (v_start-1)/tot_frames
+                
+                # Setup video writer object to receive new SR frames
+                o_ext = dt_set.out_ext
+                if o_ext in ['avc1', 'mp4v', 'ffv1']:
+                    fps = v_stream.get(cv2.CAP_PROP_FPS)
+                    # tot_time_sec = tot_frames/fps
+                    # v_start_sec = (v_start-1)/fps
+                    # start_time_code = v_start_sec/tot_time_sec
+                    # zero_idx_time_code = (v_start-1)/tot_frames
+                    
+                    fourcc = imw_code[o_ext][0]
+                    i_name = '{}-{}.{}'.format(v_start, v_stop, imw_code[o_ext][1])
+                    o_path = '{}/{}/{}'.format(os.getcwd(), dt_set.out_dir, i_name)
+                    sr_x = int(v_stream.get(cv2.CAP_PROP_FRAME_WIDTH) * UP_SIZE)
+                    sr_y = int(v_stream.get(cv2.CAP_PROP_FRAME_HEIGHT) * UP_SIZE)
+                    vout = cv2.VideoWriter(o_path, fourcc, fps, (sr_x, sr_y), True)
+                    vout.set(cv2.VIDEOWRITER_PROP_NSTRIPES, -1)
+                    vout.set(cv2.VIDEOWRITER_PROP_QUALITY, 100.)
+                    dt_set.vout = vout
+
                 v_stream.set(cv2.CAP_PROP_POS_FRAMES, v_start-1)
                 grab_frame_stat, img = v_stream.read()
                 if not grab_frame_stat:
@@ -326,15 +349,23 @@ def ext_based_workflows(dt_set):
                     while grab_frame_stat:
                         diff = cv2.absdiff(img, img_pre)
                         non_zero_count = np.count_nonzero(diff)
+
                         # TODO: scan and detect which frames have scene transitions..
+                        # # TODO: study the following during hist shifts for hdiff threshold
+                        # nbins = 64
+                        # min = np.minimum(img, img_pre)
+                        # max = np.maximum(img, img_pre)
+                        # hist1, _ = np.histogram(img, range(min, max), bins=nbins)
+                        # hist2, _ = np.histogram(img_pre, range(min, max), bins=nbins)
+                        # hdiff = np.absolute(hist1 - hist2)
+                        
                         # TODO: select diff SR model for dark upscale + enhanced contrast
                         # TODO: re-analyze blur, pre-post filter settings on scene changes?
                         # TODO: create a transfer-learning repo w lables and features?
                         # Scene change can be detected with histogram median shifts
                         # And light/dark scenes can be detected with shift in normalized
                         # median luma level shifting
-                        # h1gray = cv2.calcHist(img, [0], None, [24],[0, 255])
-                        # h2gray = cv2.calcHist(img_pre, [0], None, [24],[0, 255])                        
+                                             
                         if v_start - back_scan_offset < 0:
                             break
                         elif non_zero_count > p_frame_thresh:

@@ -69,6 +69,36 @@ class TestVideoExtraction(unittest.TestCase):
         files = glob.glob('*.png')
         self.assertTrue(len(files) > 0)
 
+    def test_main_args_video_out1(self):
+        os.chdir(os.path.dirname(os.path.realpath(__file__)))
+        # os.chdir('test')
+        fn = 'Han Shoots Greedo.mp4'
+        cmd = [
+            fn, '-d', 'My_Upscale',
+            '-ext', 'avc1',
+            '-x1', '.8', '-x0', '.1', '-e', '8'
+        ]
+        result = dnn_pb_upscaler_unsharp.main(cmd)
+        self.assertTrue(os.path.isdir(result))
+        os.chdir(result)
+        files = glob.glob('*.mp4')
+        self.assertTrue(len(files) > 0)
+        
+    def test_main_args_video_out2(self):
+        os.chdir(os.path.dirname(os.path.realpath(__file__)))
+        # os.chdir('test')
+        fn = 'Han Shoots Greedo.mp4'
+        cmd = [
+            fn, '-d', 'My_Upscale',
+            '-ext', 'ffv1',
+            '-x1', '.8', '-x0', '.1', '-e', '8'
+        ]
+        result = dnn_pb_upscaler_unsharp.main(cmd)
+        self.assertTrue(os.path.isdir(result))
+        os.chdir(result)
+        files = glob.glob('*.mkv')
+        self.assertTrue(len(files) > 0)
+    
 
 if __name__ == '__main__':
     unittest.main()
