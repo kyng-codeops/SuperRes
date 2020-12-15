@@ -266,7 +266,10 @@ def process_pipeline(image, i_name, dt_set):
     # Save final frame    
     try:
         # try using video output object and fall back to imwrite
-        was_wrtn = dt_set.vout.write(result)
+        # was_wrtn = dt_set.vout.write(result)
+        dsize = dt_set.dsize
+        was_wrtn = dt_set.vout.write(cv2.resize(result, dsize, interpolation=cv2.INTER_CUBIC))
+        # TODO: could use laplacian variance to test bicubic vs lanczos4 ?
         if was_wrtn is None:
             was_wrtn = True
     except AttributeError:
@@ -332,10 +335,16 @@ def ext_based_workflows(dt_set):
                     o_path = '{}/{}/{}'.format(os.getcwd(), dt_set.out_dir, i_name)
                     sr_x = int(v_stream.get(cv2.CAP_PROP_FRAME_WIDTH) * UP_SIZE)
                     sr_y = int(v_stream.get(cv2.CAP_PROP_FRAME_HEIGHT) * UP_SIZE)
-                    vout = cv2.VideoWriter(o_path, fourcc, fps, (sr_x, sr_y), True)
+                    # TODO: need to create checks as this assumes the sr_y > 1080
+                    new_y = 1080
+                    new_x = int(2 * round(((sr_x * 1080)/sr_y)/2))
+                    dsize = (new_x, new_y)
+
+                    vout = cv2.VideoWriter(o_path, fourcc, fps, dsize, True)
                     vout.set(cv2.VIDEOWRITER_PROP_NSTRIPES, -1)
-                    vout.set(cv2.VIDEOWRITER_PROP_QUALITY, 100.)
+                    # vout.set(cv2.VIDEOWRITER_PROP_QUALITY, 100.)
                     dt_set.vout = vout
+                    dt_set.dsize = dsize
 
                 v_stream.set(cv2.CAP_PROP_POS_FRAMES, v_start-1)
                 grab_frame_stat, img = v_stream.read()
