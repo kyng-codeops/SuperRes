@@ -3,6 +3,7 @@
 import cv2
 from cv2 import dnn_superres
 from scipy.ndimage.filters import median_filter
+from tqdm import tqdm
 import numpy as np
 import plaidml.keras
 import time
@@ -10,6 +11,7 @@ import os
 import sys
 import glob
 import argparse
+import logging
 
 cv2.ocl.setUseOpenCL(True)
 
@@ -40,9 +42,14 @@ imw_code = {
     'png3': ([cv2.IMWRITE_PNG_COMPRESSION, 4], 'png'),
     'png9': ([cv2.IMWRITE_PNG_COMPRESSION, 9], 'png'),
     'wpll': ([cv2.IMWRITE_WEBP_QUALITY, 101], 'webp'),
+    'mp4v': (cv2.VideoWriter_fourcc(*'mp4v'), 'mp4'),
     'avc1': (cv2.VideoWriter_fourcc(*'avc1'), 'mp4'),
-    'ffv1': (cv2.VideoWriter_fourcc(*'FFV1'), 'mkv')
+    'avc3': (cv2.VideoWriter_fourcc(*'avc3'), 'mkv'),
+    'hev1': (cv2.VideoWriter_fourcc(*'hev1'), 'mkv'),
+    'ffv1': (cv2.VideoWriter_fourcc(*'FFV1'), 'mkv'),
+    'hfyu': (cv2.VideoWriter_fourcc(*'HFYU'), 'mkv')
 }
+V_CODEC = ['mp4v', 'avc1', 'avc3', 'hev1', 'ffv1', 'hfyu']
 V_O_EXT = 'png9'
 I_O_EXT = 'jpg'
 I_O_DIR = M_LABEL
@@ -106,7 +113,7 @@ def sharpen_channel_laplacian(image, sigma, strength):
     clip_hi = np.amax(result)
     clip_lo = np.amin(result)
     if clip_lo < 0 or clip_hi > 255:
-        print('sharpen filter cliping: hi_val {} lo_val {}'.format(
+        logging.warning('sharpen filter cliping: hi_val {} lo_val {}'.format(
             clip_hi, clip_lo ))
     """
     result[result > 255] = 255
@@ -186,9 +193,9 @@ def process_pipeline(image, i_name, dt_set):
         extRight = tuple(c[c[:, :, 0].argmax()][0])
         extTop = tuple(c[c[:, :, 1].argmin()][0])
         extBot = tuple(c[c[:, :, 1].argmax()][0])
-        # print('x:{} y:{} w:{} h:{}'.format(extLeft[0], extTop[1], extRight[0], extBot[1]))
+        # logging.debug('x:{} y:{} w:{} h:{}'.format(extLeft[0], extTop[1], extRight[0], extBot[1]))
         x, y, w, h = [extLeft[0], extTop[1], extRight[0], extBot[1]]
-        print('autocrop frame: x:{} y:{} w:{} h:{}'.format(x, y, w, h))
+        logging.debug('autocrop frame: x:{} y:{} w:{} h:{}'.format(x, y, w, h))
         result = result[y:y+h, x:x+w]    # crop
 
     # blur = cv2.GaussianBlur(gray,(5,5),0)
@@ -277,11 +284,11 @@ def process_pipeline(image, i_name, dt_set):
         o_path = '{}/{}/{}.{}'.format(workdir, dt_set.out_dir, i_name, imw_code[o_ext][1])
         was_wrtn = cv2.imwrite(o_path, result, imw_code[o_ext][0])
 
-    if was_wrtn:
+    if was_wrtn and dt_set.log in ['info', 'INFO']:
         out_hr = '[{:.{prec}f}%] {}_x{}: {}'.format(
             dt_set.pct_done, PRE_BUILT[MOD_NAME], UP_SIZE, i_name, prec=1)
         tot_lat = time.time() - pipe_t0
-        print('{} {} tot_lat: {:.{prec}f}s'.
+        logging.info('{} {} tot_lat: {:.{prec}f}s'.
         format(out_hr, stage_dts, tot_lat, prec=2))
 
 
@@ -300,6 +307,7 @@ def ext_based_workflows(dt_set):
     
     p_frame_thresh = 300000
     back_scan_offset = 2
+    logging.info('**** RUN STARTED ****')
 
     for fp in file_pattern:
         ext = fp.split('.')[-1].lower()
@@ -311,19 +319,19 @@ def ext_based_workflows(dt_set):
                 i_name = '.'.join(fp.split('.')[:-1])
                 process_pipeline(image, i_name, dt_set)
             else:
-                print('file: {} does not exist'.format(fp))
+                logging.warning('file: {} does not exist'.format(fp))
 
         elif ext in ['mp4', 'm4v', 'mkv', 'avi']:
             # workflow for pulling images out of video files (adj requesting frame 1 = 0 secs)
             try:
                 v_stream = cv2.VideoCapture(fp)
-                tot_frames = v_stream.get(cv2.CAP_PROP_FRAME_COUNT)
+                tot_frames = int(v_stream.get(cv2.CAP_PROP_FRAME_COUNT))
                 if v_stop == 0:
                     v_stop = tot_frames
                 
                 # Setup video writer object to receive new SR frames
                 o_ext = dt_set.out_ext
-                if o_ext in ['avc1', 'mp4v', 'ffv1']:
+                if o_ext in V_CODEC:
                     fps = v_stream.get(cv2.CAP_PROP_FPS)
                     # tot_time_sec = tot_frames/fps
                     # v_start_sec = (v_start-1)/fps
@@ -331,7 +339,7 @@ def ext_based_workflows(dt_set):
                     # zero_idx_time_code = (v_start-1)/tot_frames
                     
                     fourcc = imw_code[o_ext][0]
-                    i_name = '{}-{}.{}'.format(v_start, v_stop, imw_code[o_ext][1])
+                    i_name = '{}_{}-{}.{}'.format(o_ext, v_start, v_stop, imw_code[o_ext][1])
                     o_path = '{}/{}/{}'.format(os.getcwd(), dt_set.out_dir, i_name)
                     sr_x = int(v_stream.get(cv2.CAP_PROP_FRAME_WIDTH) * UP_SIZE)
                     sr_y = int(v_stream.get(cv2.CAP_PROP_FRAME_HEIGHT) * UP_SIZE)
@@ -342,18 +350,18 @@ def ext_based_workflows(dt_set):
 
                     vout = cv2.VideoWriter(o_path, fourcc, fps, dsize, True)
                     vout.set(cv2.VIDEOWRITER_PROP_NSTRIPES, -1)
-                    # vout.set(cv2.VIDEOWRITER_PROP_QUALITY, 100.)
+                    vout.set(cv2.VIDEOWRITER_PROP_QUALITY, 100.)
                     dt_set.vout = vout
                     dt_set.dsize = dsize
 
                 v_stream.set(cv2.CAP_PROP_POS_FRAMES, v_start-1)
                 grab_frame_stat, img = v_stream.read()
                 if not grab_frame_stat:
-                    print('Unable to decode video frame from [{}] at frame {}'.format(fp, v_start))
+                    logging.warning('Unable to decode video frame from [{}] at frame {}'.format(fp, v_start))
                     if v_stream.isOpened():
-                        print('Did you install ffmpeg before building opencv?')
+                        logging.warning('Did you install ffmpeg before building opencv?')
                     else:
-                        print('v_stream not even able to open')
+                        logging.warning('v_stream not even able to open')
                 if v_start > 1:
                     
                     """ Test prev frame to see if current frame is P frame? """
@@ -401,28 +409,36 @@ def ext_based_workflows(dt_set):
                         """ skip back and scan forward """
                         m1 = 'User selected frame might be a P-Frame:'
                         m2 = 'pre-scanned {} frames'.format(back_scan_offset)
-                        print(m1 + m2)
+                        logging.info(m1 + m2)
                         new_start = v_start - (back_scan_offset - 1)
                         v_stream.set(cv2.CAP_PROP_POS_FRAMES, new_start)
                         for trash in range(new_start, v_start, 1):
                             grab_frame_stat, img = v_stream.read()
                 """ start normal frame retrieval process """
                 count = v_start
+                tot_xf = v_stop - v_start
+                pbar = tqdm(total = tot_xf + 1, unit=' frames', mininterval=1.0)
                 while grab_frame_stat:
                     if count > v_stop:
                         break
                     elif count >= v_start:
                         i_name = '{:0>{width}}'.format(count, width=7)
-                        dt_set.pct_done = float(count - v_start)/(v_stop - v_start)*100
+                        dt_set.pct_done = float(count - v_start)*100/tot_xf
                         process_pipeline(img, i_name, dt_set)
                     else:
                         # sequential processing is slow, this section deprecated with set function above
-                        print('\r{:>0{width}}'.format(count, width=7))
+                        logging.debug('unknown frame loop {:>0{width}}'.format(count, width=7))
                     grab_frame_stat, img = v_stream.read()
                     count += 1
+                    pbar.update(1)
+                pbar.close()
                 v_stream.release()
+                try:
+                    vout.release()
+                except UnboundLocalError:
+                    pass               
             except ZeroDivisionError:
-                print('Could not get video duration.')
+                logging.warning('Could not get video duration.')
                 pass
 
 def get_cli_args(args):
@@ -449,10 +465,13 @@ def get_cli_args(args):
         help='unsharp RGB strength 0=off 0.7 to 2 make sense')
     parser.add_argument('-x2', '--postsharpen2', nargs=1, default='0', 
         help='unsharp HSV saturation strength 0=off 0.7 to 2 make sense')
+    parser.add_argument('-log', '--log', nargs=1, default='WARNING', 
+        choices=['debug', 'info', 'warning'])
     parser.add_argument('file', nargs='*',
         help='file_name or file_name_pattern')
     ns = parser.parse_args(args)
 
+    # Convenience: unpack ns entries from lists to scalars except ['files']
     for k, v in ns.__dict__.items():
         if isinstance(v, list) and k != 'file':
             if len(v) == 1:
@@ -476,7 +495,11 @@ def get_cli_args(args):
 def main(args):
     # gather user cli options
     ns = get_cli_args(args)
-    
+    logging.basicConfig(
+        filename='dnn_superres.log', 
+        format='%(asctime)s %(levelname)s:%(message)s', 
+        level=ns.log.upper()
+        )
     # @decorate this target function or manually wrap next line for gpu
     set_sr_model(MOD_NAME, UP_SIZE)
     
