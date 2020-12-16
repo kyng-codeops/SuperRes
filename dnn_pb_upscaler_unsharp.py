@@ -12,6 +12,9 @@ import sys
 import glob
 import argparse
 import logging
+import signal
+
+my_pid = os.getpid()
 
 cv2.ocl.setUseOpenCL(True)
 
@@ -60,6 +63,20 @@ sr = dnn_superres.DnnSuperResImpl_create()
 # Handy debugging
 # before = img.shape()
 # after = result.shape()
+
+vout = None
+
+def terminateProcess(signalNumber, frame):
+    try:
+        vout.release()
+        msg = 'Signal {} recieved and gracefully saved video output'.format(signalNumber)
+    except:
+        msg = 'Signal {} recieved and no video output to close'.format(signalNumber)
+    
+    logging.info(msg)
+    print(msg)
+    sys.exit
+    os.kill(my_pid, signal.SIGQUIT)
 
 def plaidml_decorator(func):
     def wrapper(*args, **kwargs):
@@ -273,9 +290,9 @@ def process_pipeline(image, i_name, dt_set):
     # Save final frame    
     try:
         # try using video output object and fall back to imwrite
-        # was_wrtn = dt_set.vout.write(result)
         dsize = dt_set.dsize
-        was_wrtn = dt_set.vout.write(cv2.resize(result, dsize, interpolation=cv2.INTER_CUBIC))
+        # was_wrtn = dt_set.vout.write(result)
+        was_wrtn = vout.write(cv2.resize(result, dsize, interpolation=cv2.INTER_CUBIC))
         # TODO: could use laplacian variance to test bicubic vs lanczos4 ?
         if was_wrtn is None:
             was_wrtn = True
@@ -307,10 +324,13 @@ def ext_based_workflows(dt_set):
     
     p_frame_thresh = 300000
     back_scan_offset = 2
-    logging.info('**** RUN STARTED ****')
+
+    print('Running as PID:', my_pid)
+    logging.info(' **** RUN STARTED with PID: {} ****'.format(my_pid))
 
     for fp in file_pattern:
         ext = fp.split('.')[-1].lower()
+        fnpfx = fp.split('.')[:-1][0]
 
         if ext in ['jpg', 'jpeg', 'png']:
             # workflow for individual image_files
@@ -339,7 +359,13 @@ def ext_based_workflows(dt_set):
                     # zero_idx_time_code = (v_start-1)/tot_frames
                     
                     fourcc = imw_code[o_ext][0]
-                    i_name = '{}_{}-{}.{}'.format(o_ext, v_start, v_stop, imw_code[o_ext][1])
+                    i_name = '{}_{}_{:0>{width}}-{:0>{width}}.{}'.format(
+                        fnpfx, 
+                        o_ext.upper(), 
+                        v_start, v_stop, 
+                        imw_code[o_ext][1],
+                        width=len(str(v_stop))
+                        )
                     o_path = '{}/{}/{}'.format(os.getcwd(), dt_set.out_dir, i_name)
                     sr_x = int(v_stream.get(cv2.CAP_PROP_FRAME_WIDTH) * UP_SIZE)
                     sr_y = int(v_stream.get(cv2.CAP_PROP_FRAME_HEIGHT) * UP_SIZE)
@@ -347,11 +373,14 @@ def ext_based_workflows(dt_set):
                     new_y = 1080
                     new_x = int(2 * round(((sr_x * 1080)/sr_y)/2))
                     dsize = (new_x, new_y)
-
+                    
+                    global vout
+                    
                     vout = cv2.VideoWriter(o_path, fourcc, fps, dsize, True)
                     vout.set(cv2.VIDEOWRITER_PROP_NSTRIPES, -1)
                     vout.set(cv2.VIDEOWRITER_PROP_QUALITY, 100.)
-                    dt_set.vout = vout
+                    logging.info(' openned: {}'.format(o_path))
+                    # dt_set.vout = vout
                     dt_set.dsize = dsize
 
                 v_stream.set(cv2.CAP_PROP_POS_FRAMES, v_start-1)
@@ -422,7 +451,7 @@ def ext_based_workflows(dt_set):
                     if count > v_stop:
                         break
                     elif count >= v_start:
-                        i_name = '{:0>{width}}'.format(count, width=7)
+                        i_name = '{:0>{width}}'.format(count, width=len(str(v_stop)))
                         dt_set.pct_done = float(count - v_start)*100/tot_xf
                         process_pipeline(img, i_name, dt_set)
                     else:
@@ -435,7 +464,7 @@ def ext_based_workflows(dt_set):
                 v_stream.release()
                 try:
                     vout.release()
-                except UnboundLocalError:
+                except (UnboundLocalError, AttributeError):
                     pass               
             except ZeroDivisionError:
                 logging.warning('Could not get video duration.')
@@ -515,4 +544,6 @@ def main(args):
     return o_dir
 
 if __name__ == "__main__":
+    signal.signal(signal.SIGTERM, terminateProcess)
+    signal.signal(signal.SIGINT, terminateProcess)
     main(sys.argv[1:])
