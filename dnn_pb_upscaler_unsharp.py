@@ -246,6 +246,17 @@ def process_pipeline(image, i_name, dt_set):
         result, dt = run_decorator(result, 1, dt_set.presharp)
         stage_dts.append('sharpen {:.{prec}f}s'.format(dt, prec=2))
     
+    """ ese = expand shrink expand... experiment with lanczos4 sharpening """
+    if dt_set.ese:
+        orig_y, orig_x, chans = result.shape
+        run_decorator = time_it_decorator(sr.upsample)
+        result, dt = run_decorator(result)
+        run_decorator = time_it_decorator(cv2.resize)
+        result, dt2 = run_decorator(result, (orig_x, orig_y), interpolation=cv2.INTER_LANCZOS4)
+        stage_dts.append('ESE {:.2f}s'.format(dt+dt2))
+        lpc_score = blur_detection(result)
+        stage_dts.append('lpcVar:{:.0f}'.format(lpc_score))    
+
     """ Upscale the image """
     # result, dt = sr_up(result)
     run_decorator = time_it_decorator(sr.upsample)
@@ -369,9 +380,14 @@ def ext_based_workflows(dt_set):
                     o_path = '{}/{}/{}'.format(os.getcwd(), dt_set.out_dir, i_name)
                     sr_x = int(v_stream.get(cv2.CAP_PROP_FRAME_WIDTH) * UP_SIZE)
                     sr_y = int(v_stream.get(cv2.CAP_PROP_FRAME_HEIGHT) * UP_SIZE)
+                    
                     # TODO: need to create checks as this assumes the sr_y > 1080
-                    new_y = 1080
-                    new_x = int(2 * round(((sr_x * 1080)/sr_y)/2))
+                    # new_y = 1080
+                    # new_x = int(2 * round(((sr_x * new_y)/sr_y)/2))
+                    
+                    new_x = 1920
+                    new_y = int(round(((new_x * sr_y)/sr_x)/2) * 2)
+
                     dsize = (new_x, new_y)
                     
                     global vout
@@ -470,6 +486,7 @@ def ext_based_workflows(dt_set):
                 logging.warning('Could not get video duration.')
                 pass
 
+
 def get_cli_args(args):
     parser = argparse.ArgumentParser(description='Upconvert a video or image(s) using NN SR.')
     parser.add_argument('-s', '--start', nargs=1, required=False,
@@ -488,6 +505,7 @@ def get_cli_args(args):
         help='pre upscale sharpening strength 0=off 0.1 to 0.2 make sense')
     parser.add_argument('-nl0', '--pre-denoise', nargs=1, default=0,
         help='pre upscale nlmeans denoising hC=hL integer')
+    parser.add_argument('-ese', action='store_true')
     parser.add_argument('-nl1', '--postdenoise', nargs=1, default=0,
         help='post upscale nlmeans denoising hC=hL integer')        
     parser.add_argument('-x1', '--postsharpen', nargs=1, default='0', 
@@ -519,7 +537,6 @@ def get_cli_args(args):
     except:
         raise
     return ns
-
 
 def main(args):
     # gather user cli options

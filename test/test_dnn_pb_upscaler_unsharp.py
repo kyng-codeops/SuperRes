@@ -75,9 +75,8 @@ class TestVideoExtraction(unittest.TestCase):
         # os.chdir('test')
         fn = 'Han Shoots Greedo.mp4'
         cmd = [
-            fn, '-d', 'My_Upscale',
-            '-ext', 'avc1',
-            '-x1', '.8', '-x0', '.1', '-e', '8'
+            fn, '-d', 'My_Upscale', '-log', 'info',
+            '-ext', 'mp4v', '-ese'
         ]
         result = dnn_pb_upscaler_unsharp.main(cmd)
         self.assertTrue(os.path.isdir(result))
