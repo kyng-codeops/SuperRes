@@ -60,6 +60,12 @@ I_O_DIR = M_LABEL
 # Create a global SR object
 sr = dnn_superres.DnnSuperResImpl_create()
 
+# Load ONNX network
+srpath = '{}/{}'.format(M_FQP, 'super-resolution-10.onnx')
+net = cv2.dnn.readNetFromONNX(srpath)
+net.setPreferableBackend(cv2.dnn.DNN_BACKEND_OPENCV) 
+net.setPreferableTarget(cv2.dnn.DNN_TARGET_CPU)
+
 # Handy debugging
 # before = img.shape()
 # after = result.shape()
@@ -114,10 +120,10 @@ def set_sr_model(model, scale):
     Wrap this function with the @cuda_decorator or @plaidml_decorator to
     run SR on GPU.. or selectively run with call wrapping
     """
-    m_fname = '{}_x{}.pb'.format(PRE_BUILT[model], scale)
-    m_fqp = os.path.dirname(os.path.realpath(__file__))
-    m_fqn = '{}/{}'.format(m_fqp, m_fname)
-    sr.readModel(m_fqn)
+    # m_fname = '{}_x{}.pb'.format(PRE_BUILT[model], scale)
+    # m_fqp = os.path.dirname(os.path.realpath(__file__))
+    # m_fqn = '{}/{}'.format(m_fqp, m_fname)
+    sr.readModel(M_FQN)
     sr.setModel(model, scale)    
 
 def sharpen_channel_laplacian(image, sigma, strength):
@@ -198,22 +204,19 @@ def process_pipeline(image, i_name, dt_set):
     lpc_score = blur_detection(result)
     stage_dts.append('origLpcVar:{:.0f}'.format(round(lpc_score)))
 
-    """ autocrop black boarders """
-    if dt_set.autocrop:
-        gray = cv2.cvtColor(result, cv2.COLOR_BGR2GRAY)
-        _, thresh = cv2.threshold(gray, 0, 255, cv2.THRESH_BINARY)
-        contours, hierarchy = cv2.findContours(thresh, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
-        # x, y, w, h = cv2.boundingRect(contours[0]) # new boundary
-        
-        c = max(contours, key=cv2.contourArea)
-        extLeft = tuple(c[c[:, :, 0].argmin()][0])
-        extRight = tuple(c[c[:, :, 0].argmax()][0])
-        extTop = tuple(c[c[:, :, 1].argmin()][0])
-        extBot = tuple(c[c[:, :, 1].argmax()][0])
-        # logging.debug('x:{} y:{} w:{} h:{}'.format(extLeft[0], extTop[1], extRight[0], extBot[1]))
-        x, y, w, h = [extLeft[0], extTop[1], extRight[0], extBot[1]]
-        logging.debug('autocrop frame: x:{} y:{} w:{} h:{}'.format(x, y, w, h))
-        result = result[y:y+h, x:x+w]    # crop
+    """ crop black boarders """
+    if dt_set.crop:
+        l, r, t, b = dt_set.crop
+        h, w, chan = result.shape
+        start_x = int(l)
+        stop_x = w - int(r)
+        start_y = int(t)
+        stop_y = h - int(b)
+        logging.debug(
+            'crop frame: y0:{} y1:{} x0:{} x1:{}'.format(
+                start_y, stop_y, start_x, stop_x)
+            )
+        result = result[start_y:stop_y, start_x:stop_x]
 
     # blur = cv2.GaussianBlur(gray,(5,5),0)
     # _, thresh = cv2.threshold(blur, 0, 255, cv2.THRESH_BINARY+cv2.THRESH_OTSU)
@@ -258,12 +261,17 @@ def process_pipeline(image, i_name, dt_set):
         stage_dts.append('lpcVar:{:.0f}'.format(lpc_score))    
 
     """ Upscale the image """
-    # result, dt = sr_up(result)
-    run_decorator = time_it_decorator(sr.upsample)
-    result, dt = run_decorator(result)
-    stage_dts.append('SupRes {:.2f}s'.format(dt))
-    lpc_score = blur_detection(result)
-    stage_dts.append('lpcVar:{:.0f}'.format(lpc_score))
+    if dt_set.sr10:
+        blob = cv2.dnn.blobFromImage(result, swapRB=True, crop=False)
+        net.setInput(blob)
+        result = net.forward()
+    else:
+        # result, dt = sr_up(result)
+        run_decorator = time_it_decorator(sr.upsample)
+        result, dt = run_decorator(result)
+        stage_dts.append('SupRes {:.2f}s'.format(dt))
+        lpc_score = blur_detection(result)
+        stage_dts.append('lpcVar:{:.0f}'.format(lpc_score))
 
     """ Post nlmeans denoising """
     if dt_set.postdenoise > 0:
@@ -338,6 +346,8 @@ def ext_based_workflows(dt_set):
 
     print('Running as PID:', my_pid)
     logging.info(' **** RUN STARTED with PID: {} ****'.format(my_pid))
+    
+    pbar0 = tqdm(total = len(file_pattern), unit=' files', mininterval=1.0)
 
     for fp in file_pattern:
         ext = fp.split('.')[-1].lower()
@@ -351,6 +361,8 @@ def ext_based_workflows(dt_set):
                 process_pipeline(image, i_name, dt_set)
             else:
                 logging.warning('file: {} does not exist'.format(fp))
+                print('file: {} does not exist'.format(fp))
+                sys.exit()
 
         elif ext in ['mp4', 'm4v', 'mkv', 'avi']:
             # workflow for pulling images out of video files (adj requesting frame 1 = 0 secs)
@@ -364,6 +376,8 @@ def ext_based_workflows(dt_set):
                 o_ext = dt_set.out_ext
                 if o_ext in V_CODEC:
                     fps = v_stream.get(cv2.CAP_PROP_FPS)
+                    # TODO: Need PAR input to do SAR * PAR = DAR (display AR) for resizing
+
                     # tot_time_sec = tot_frames/fps
                     # v_start_sec = (v_start-1)/fps
                     # start_time_code = v_start_sec/tot_time_sec
@@ -378,15 +392,19 @@ def ext_based_workflows(dt_set):
                         width=len(str(v_stop))
                         )
                     o_path = '{}/{}/{}'.format(os.getcwd(), dt_set.out_dir, i_name)
-                    sr_x = int(v_stream.get(cv2.CAP_PROP_FRAME_WIDTH) * UP_SIZE)
-                    sr_y = int(v_stream.get(cv2.CAP_PROP_FRAME_HEIGHT) * UP_SIZE)
+                    lx, rx, ty, by = dt_set.crop
+                    ax, ay = dt_set.par
+                    sr_x = int((v_stream.get(cv2.CAP_PROP_FRAME_WIDTH) - int(lx) - int(rx)) * UP_SIZE)
+                    sr_y = int((v_stream.get(cv2.CAP_PROP_FRAME_HEIGHT) - int(ty) - int(by)) * UP_SIZE)
                     
                     # TODO: need to create checks as this assumes the sr_y > 1080
                     # new_y = 1080
                     # new_x = int(2 * round(((sr_x * new_y)/sr_y)/2))
                     
                     new_x = 1920
-                    new_y = int(round(((new_x * sr_y)/sr_x)/2) * 2)
+                    # new_y = int(round(((new_x * sr_y)/sr_x)/2) * 2)
+                    new_y = (((new_x * sr_y)/sr_x)*int(ay))/int(ax)
+                    new_y = int(round(new_y/2)*2)
 
                     dsize = (new_x, new_y)
                     
@@ -462,7 +480,7 @@ def ext_based_workflows(dt_set):
                 """ start normal frame retrieval process """
                 count = v_start
                 tot_xf = v_stop - v_start
-                pbar = tqdm(total = tot_xf + 1, unit=' frames', mininterval=1.0)
+                pbar1 = tqdm(total = tot_xf + 1, unit=' frames', mininterval=1.0)
                 while grab_frame_stat:
                     if count > v_stop:
                         break
@@ -475,8 +493,8 @@ def ext_based_workflows(dt_set):
                         logging.debug('unknown frame loop {:>0{width}}'.format(count, width=7))
                     grab_frame_stat, img = v_stream.read()
                     count += 1
-                    pbar.update(1)
-                pbar.close()
+                    pbar1.update(1)
+                pbar1.close()
                 v_stream.release()
                 try:
                     vout.release()
@@ -485,6 +503,8 @@ def ext_based_workflows(dt_set):
             except ZeroDivisionError:
                 logging.warning('Could not get video duration.')
                 pass
+        pbar0.update(1)
+    pbar0.close()
 
 
 def get_cli_args(args):
@@ -500,12 +520,18 @@ def get_cli_args(args):
         default=V_O_EXT,
         choices=imw_code.keys(),
         help='string to define output type')
-    parser.add_argument('-ac', '--autocrop', action='store_true')
+    parser.add_argument('-cr', '--crop', nargs=4, required=False, 
+        default=['0','0','0','0'],
+        help='Lft Rgt Top Bot pixels to cut')
+    parser.add_argument('-par', '--par', nargs=2, required=False,
+        default=['1', '1'],
+        help='x y')
     parser.add_argument('-x0', '--presharp', nargs=1, default='0',
         help='pre upscale sharpening strength 0=off 0.1 to 0.2 make sense')
     parser.add_argument('-nl0', '--pre-denoise', nargs=1, default=0,
         help='pre upscale nlmeans denoising hC=hL integer')
     parser.add_argument('-ese', action='store_true')
+    parser.add_argument('-sr10', action='store_true')
     parser.add_argument('-nl1', '--postdenoise', nargs=1, default=0,
         help='post upscale nlmeans denoising hC=hL integer')        
     parser.add_argument('-x1', '--postsharpen', nargs=1, default='0', 
@@ -516,19 +542,20 @@ def get_cli_args(args):
         choices=['debug', 'info', 'warning'])
     parser.add_argument('file', nargs='*',
         help='file_name or file_name_pattern')
-    ns = parser.parse_args(args)
-
-    # Convenience: unpack ns entries from lists to scalars except ['files']
-    for k, v in ns.__dict__.items():
-        if isinstance(v, list) and k != 'file':
-            if len(v) == 1:
-                ns.__dict__.update({k: v[0]})
-
-    # For args with defaults add kv ease passing args in pipeline
-    ns.kw_cus_arg = {'o_ext': ns.out_ext}
-    ns.kw_cus_arg.update({'o_dir': ns.out_dir})
-
     try:
+        ns = parser.parse_args(args)
+
+        # Convenience: unpack ns scalar entries from lists to scalars except ['files']
+        for k, v in ns.__dict__.items():
+            if isinstance(v, list) and k != 'file':
+                if len(v) == 1:
+                    ns.__dict__.update({k: v[0]})
+
+        # For args with defaults add kv ease passing args in pipeline
+        ns.kw_cus_arg = {'o_ext': ns.out_ext}
+        ns.kw_cus_arg.update({'o_dir': ns.out_dir})
+
+    # try:
         ns.postsharpen = float(ns.postsharpen)
         ns.postsharpen2 = float(ns.postsharpen2)
         ns.presharp = float(ns.presharp)
@@ -536,10 +563,13 @@ def get_cli_args(args):
         ns.postdenoise = int(ns.postdenoise)
     except:
         raise
+
     return ns
 
 def main(args):
-    # gather user cli options
+    if len(args) < 1:
+        args.append('-h')
+    # get user cli options with argparse module or exit
     ns = get_cli_args(args)
     logging.basicConfig(
         filename='dnn_superres.log', 
@@ -563,4 +593,5 @@ def main(args):
 if __name__ == "__main__":
     signal.signal(signal.SIGTERM, terminateProcess)
     signal.signal(signal.SIGINT, terminateProcess)
+    
     main(sys.argv[1:])

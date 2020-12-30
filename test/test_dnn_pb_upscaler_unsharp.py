@@ -11,6 +11,19 @@ HOMEDIR = os.getenv('HOME')
 
 class TestUnits(unittest.TestCase):
 
+    def test_main_args_null(self):
+        # should just see the help menu then argparse will do SystemExit
+        os.chdir(os.path.dirname(os.path.realpath(__file__)))
+        cmd = []
+        try:
+            result = dnn_pb_upscaler_unsharp.main(cmd)
+        except SystemExit:
+            pass    
+        try:
+            self.assertFalse(isinstance(result, str))
+        except UnboundLocalError:
+            pass
+
     def test_get_cli_args(self):
         os.chdir(os.path.dirname(os.path.realpath(__file__)))
         fn = 'test_vid.mkv'
@@ -29,10 +42,16 @@ class TestUnits(unittest.TestCase):
         os.chdir(os.path.dirname(os.path.realpath(__file__)))
         # os.chdir('test')
         fn = 'none.png'
+        # fn = '41.png'
         cmd = [ fn ]
-        result = dnn_pb_upscaler_unsharp.main(cmd)
-        output = '{}/{}'.format(result, '001.jpg')
-        self.assertFalse(os.path.isfile(output))
+        try:
+            result = dnn_pb_upscaler_unsharp.main(cmd)
+        except SystemExit:
+            pass
+        try:
+            self.assertFalse(isinstance(result, str))
+        except UnboundLocalError:
+            pass
 
 
 class TestVideoExtraction(unittest.TestCase):
@@ -51,8 +70,9 @@ class TestVideoExtraction(unittest.TestCase):
         ]
         result = dnn_pb_upscaler_unsharp.main(cmd)
         files = []
+        wpad = len(str(end))
         for i in range(int(start), int(end) + 1, 1):
-            output = '{}/{:0>{width}}.jpg'.format(result, i, width=7)
+            output = '{}/{:0>{width}}.jpg'.format(result, i, width=wpad)
             self.assertTrue(os.path.isfile(output))
     
     def test_main_args_video_end(self):
@@ -99,6 +119,20 @@ class TestVideoExtraction(unittest.TestCase):
         files = glob.glob('*.mkv')
         self.assertTrue(len(files) > 0)
     
+    def test_main_args_video_sr10(self):
+        os.chdir(os.path.dirname(os.path.realpath(__file__)))
+        # os.chdir('test')
+        fn = 'Han Shoots Greedo.mp4'
+        cmd = [
+            fn, '-d', 'My_Upscale', '--crop', '10', '10', '30', '30',
+            '-ext', 'hev1', '-log', 'info', '-s', '3600'
+        ]
+        result = dnn_pb_upscaler_unsharp.main(cmd)
+        self.assertTrue(os.path.isdir(result))
+        os.chdir(result)
+        files = glob.glob('*.mkv')
+        self.assertTrue(len(files) > 0)
+
 
 if __name__ == '__main__':
     unittest.main()
