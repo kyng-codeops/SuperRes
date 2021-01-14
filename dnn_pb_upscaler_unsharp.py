@@ -54,7 +54,7 @@ imw_code = {
     'hev1': (cv2.VideoWriter_fourcc(*'hev1'), 'mkv'),
     'ffv1': (cv2.VideoWriter_fourcc(*'FFV1'), 'mkv'),
     'hfyu': (cv2.VideoWriter_fourcc(*'HFYU'), 'mkv'),
-    'x264': ('libx264', 'mp4'),
+    'x264': ('libx264', 'mkv'),
     'x265': ('libx265', 'mkv')
 }
 V_CODEC = ['mp4v', 'avc1', 'avc3', 'hev1', 'ffv1', 'hfyu', 'x264', 'x265']
