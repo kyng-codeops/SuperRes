@@ -13,6 +13,9 @@ import glob
 import argparse
 import logging
 import signal
+# import skvideo.io
+from videoio import VideoWriter
+import subprocess as sp
 
 my_pid = os.getpid()
 
@@ -50,9 +53,12 @@ imw_code = {
     'avc3': (cv2.VideoWriter_fourcc(*'avc3'), 'mkv'),
     'hev1': (cv2.VideoWriter_fourcc(*'hev1'), 'mkv'),
     'ffv1': (cv2.VideoWriter_fourcc(*'FFV1'), 'mkv'),
-    'hfyu': (cv2.VideoWriter_fourcc(*'HFYU'), 'mkv')
+    'hfyu': (cv2.VideoWriter_fourcc(*'HFYU'), 'mkv'),
+    'x264': ('libx264', 'mp4'),
+    'x265': ('libx265', 'mkv')
 }
-V_CODEC = ['mp4v', 'avc1', 'avc3', 'hev1', 'ffv1', 'hfyu']
+V_CODEC = ['mp4v', 'avc1', 'avc3', 'hev1', 'ffv1', 'hfyu', 'x264', 'x265']
+FF_CODEC = ['x264', 'x265']
 V_O_EXT = 'png9'
 I_O_EXT = 'jpg'
 I_O_DIR = M_LABEL
@@ -75,14 +81,19 @@ vout = None
 def terminateProcess(signalNumber, frame):
     try:
         vout.release()
-        msg = 'Signal {} recieved and gracefully saved video output'.format(signalNumber)
-    except:
-        msg = 'Signal {} recieved and no video output to close'.format(signalNumber)
+        msg = 'Signal {} recieved and gracefully saved cv video output'.format(signalNumber)
+    except AttributeError:
+        try:
+            vout.close()
+            # vout.stderr.close()
+            msg = 'Signal {} recieved and gracefully saved ff video output'.format(signalNumber)
+        except:
+            msg = 'Signal {} recieved and no video output to close'.format(signalNumber)
     
     logging.info(msg)
     print(msg)
-    sys.exit
-    os.kill(my_pid, signal.SIGQUIT)
+    sys.exit()
+    # os.kill(my_pid, signal.SIGQUIT)
 
 def plaidml_decorator(func):
     def wrapper(*args, **kwargs):
@@ -311,7 +322,18 @@ def process_pipeline(image, i_name, dt_set):
         # try using video output object and fall back to imwrite
         dsize = dt_set.dsize
         # was_wrtn = dt_set.vout.write(result)
-        was_wrtn = vout.write(cv2.resize(result, dsize, interpolation=cv2.INTER_CUBIC))
+        result = cv2.resize(result, dsize, interpolation=cv2.INTER_CUBIC)
+        if o_ext in FF_CODEC:
+            # Convert from BGR to RGB on the fly for FFmpegWriter
+            # result = cv2.cvtColor(result, cv2.COLOR_BGR2RGB) # Causes broken pipe somehow
+            result = result[:,:,::-1] # better way to convert BGR-2-RGB
+            # was_wrtn = vout.writeFrame(result)
+            was_wrtn = vout.write(result)
+
+            # result = result.tostring()
+            # was_wrtn = vout.stdin.write(result)
+        else:
+            was_wrtn = vout.write(result)
         # TODO: could use laplacian variance to test bicubic vs lanczos4 ?
         if was_wrtn is None:
             was_wrtn = True
@@ -348,6 +370,11 @@ def ext_based_workflows(dt_set):
     logging.info(' **** RUN STARTED with PID: {} ****'.format(my_pid))
     
     pbar0 = tqdm(total = len(file_pattern), unit=' files', mininterval=1.0)
+    
+    global vout
+    
+    o_ext = dt_set.out_ext
+    fourcc = imw_code[o_ext][0]
 
     for fp in file_pattern:
         ext = fp.split('.')[-1].lower()
@@ -357,7 +384,41 @@ def ext_based_workflows(dt_set):
             # workflow for individual image_files
             if os.path.isfile(fp):
                 image = cv2.imread(fp)
+
+                y, x, c = image.shape
+                sr_x = int(round(x * UP_SIZE/2)*2)
+                sr_y = int(round(y * UP_SIZE/2)*2)
+                ax, ay = dt_set.par
+                new_x = 1920
+                new_y = (((new_x * sr_y)/sr_x)*int(ay))/int(ax)
+                new_y = int(round(new_y/2)*2)
+
+                dsize = (new_x, new_y)
+                dt_set.dsize = dsize
+                fps = dt_set.img_fps
+
+                if o_ext in V_CODEC and vout is None:
+                    a = file_pattern[0].split('.')[:-1][0]
+                    b = file_pattern[-1].split('.')[:-1][0]
+                    v_name = '{}_{}_{:0>{width}}-{:0>{width}}.{}'.format(
+                            dt_set.out_dir.lower(), 
+                            o_ext.upper(), 
+                            a, 
+                            b, 
+                            imw_code[o_ext][1],
+                            width=max(len(str(a)),len(str(b))) 
+                            )
+                    o_path = '{}/{}/{}'.format(os.getcwd(), dt_set.out_dir, v_name)
+                
+                    if o_ext in FF_CODEC:
+                        vout = VideoWriter(o_path, resolution=dsize, lossless=True, preset='medium', fps=fps)
+                    else:
+                        vout = cv2.VideoWriter(o_path, fourcc, fps, dsize, True)
+                        vout.set(cv2.VIDEOWRITER_PROP_NSTRIPES, -1)
+                        vout.set(cv2.VIDEOWRITER_PROP_QUALITY, 100.)
+                    
                 i_name = '.'.join(fp.split('.')[:-1])
+
                 process_pipeline(image, i_name, dt_set)
             else:
                 logging.warning('file: {} does not exist'.format(fp))
@@ -373,7 +434,7 @@ def ext_based_workflows(dt_set):
                     v_stop = tot_frames
                 
                 # Setup video writer object to receive new SR frames
-                o_ext = dt_set.out_ext
+                
                 if o_ext in V_CODEC:
                     fps = v_stream.get(cv2.CAP_PROP_FPS)
                     # TODO: Need PAR input to do SAR * PAR = DAR (display AR) for resizing
@@ -383,7 +444,7 @@ def ext_based_workflows(dt_set):
                     # start_time_code = v_start_sec/tot_time_sec
                     # zero_idx_time_code = (v_start-1)/tot_frames
                     
-                    fourcc = imw_code[o_ext][0]
+                    # fourcc = imw_code[o_ext][0]
                     i_name = '{}_{}_{:0>{width}}-{:0>{width}}.{}'.format(
                         fnpfx, 
                         o_ext.upper(), 
@@ -407,15 +468,43 @@ def ext_based_workflows(dt_set):
                     new_y = int(round(new_y/2)*2)
 
                     dsize = (new_x, new_y)
-                    
-                    global vout
-                    
-                    vout = cv2.VideoWriter(o_path, fourcc, fps, dsize, True)
-                    vout.set(cv2.VIDEOWRITER_PROP_NSTRIPES, -1)
-                    vout.set(cv2.VIDEOWRITER_PROP_QUALITY, 100.)
-                    logging.info(' openned: {}'.format(o_path))
-                    # dt_set.vout = vout
                     dt_set.dsize = dsize
+                    
+                    if o_ext not in FF_CODEC:
+                        vout = cv2.VideoWriter(o_path, fourcc, fps, dsize, True)
+                        vout.set(cv2.VIDEOWRITER_PROP_NSTRIPES, -1)
+                        vout.set(cv2.VIDEOWRITER_PROP_QUALITY, 100.)
+                    else:
+                        cfg_dict = {
+                            # '-s': '{}x{}'.format(dsize[0], dsize[1]),
+                            '-pix_fmt': 'bgr24',
+                            '-r': str(fps),
+                            '-vcode': imw_code[o_ext][0],
+                            '-crf': '0',
+                            '-preset': 'fast',
+                        }
+                        # vout = skvideo.io.FFmpegWriter(o_path, cfg_dict)
+
+                        cmd = [
+                            'ffmpeg', '-y', 
+                            '-f', 'rawvideo',
+                            '-vcodec', 'rawvideo', 
+                            '-s', '{}x{}'.format(dsize[0], dsize[1]),
+                            '-pix_fmt', 'bgr24',
+                            '-r', str(fps),
+                            '-i', '-',
+                            '-vcodec', imw_code[o_ext][0],
+                            '-crf', '0', 
+                            '-preset', 'fast',
+                            '-pix_fmt', 'yuv420p10le',
+                            o_path
+                        ]
+                        # vout = sp.Popen(cmd, stdin=sp.PIPE, stderr=sp.PIPE)
+                        # vout = sp.Popen(cmd, stdin=sp.PIPE)
+
+                        vout = VideoWriter(o_path, resolution=dsize, lossless=True, preset='medium', fps=fps)
+
+                    logging.info(' openned: {}'.format(o_path))
 
                 v_stream.set(cv2.CAP_PROP_POS_FRAMES, v_start-1)
                 grab_frame_stat, img = v_stream.read()
@@ -496,14 +585,24 @@ def ext_based_workflows(dt_set):
                     pbar1.update(1)
                 pbar1.close()
                 v_stream.release()
-                try:
-                    vout.release()
-                except (UnboundLocalError, AttributeError):
-                    pass               
+                # try:
+                #     vout.release()
+                # except AttributeError:
+                #     vout.close()
+                # except (UnboundLocalError, AttributeError):
+                #     pass
+                    
             except ZeroDivisionError:
                 logging.warning('Could not get video duration.')
                 pass
+
         pbar0.update(1)
+    try:
+        vout.release()
+    except AttributeError:
+        vout.close()
+    except (UnboundLocalError, AttributeError):
+        pass
     pbar0.close()
 
 
@@ -520,6 +619,10 @@ def get_cli_args(args):
         default=V_O_EXT,
         choices=imw_code.keys(),
         help='string to define output type')
+    parser.add_argument('-fps', '--img-fps', nargs=1, required=False,
+        default=0.,
+        help='when writing images to video a frame-rate is needed'
+        )
     parser.add_argument('-cr', '--crop', nargs=4, required=False, 
         default=['0','0','0','0'],
         help='Lft Rgt Top Bot pixels to cut')
@@ -556,6 +659,7 @@ def get_cli_args(args):
         ns.kw_cus_arg.update({'o_dir': ns.out_dir})
 
     # try:
+        ns.img_fps = float(ns.img_fps)
         ns.postsharpen = float(ns.postsharpen)
         ns.postsharpen2 = float(ns.postsharpen2)
         ns.presharp = float(ns.presharp)

@@ -6,5 +6,5 @@ test/Unsharp_out
 test/Denoise_out
 test/NewDenoise
 test/LetterFix
-test/[A-Z]*
 Han*
+dnn_superres.log

@@ -26,17 +26,20 @@ class TestUnits(unittest.TestCase):
 
     def test_get_cli_args(self):
         os.chdir(os.path.dirname(os.path.realpath(__file__)))
-        fn = 'test_vid.mkv'
         fn = 'Han Shoots Greedo.mp4'
         cmd = [
             fn,
             '-s', '1',
-            '-e', '10'
+            '-log', 'debug',
+            '-par', '8', '9'
         ]
         result = dnn_pb_upscaler_unsharp.get_cli_args(cmd)
         self.assertEqual(result.file[0], cmd[0])
         self.assertEqual(result.start, cmd[2])
-        self.assertEqual(result.end, cmd[4])
+        self.assertIs(result.end, None)
+        self.assertEqual(result.log, cmd[4])
+        self.assertEqual(result.crop, ['0', '0', '0', '0'])
+        self.assertEqual(result.par, [cmd[6], cmd[7]])
 
     def test_main_args_image(self):
         os.chdir(os.path.dirname(os.path.realpath(__file__)))
@@ -93,7 +96,7 @@ class TestVideoExtraction(unittest.TestCase):
     def test_main_args_video_out1(self):
         os.chdir(os.path.dirname(os.path.realpath(__file__)))
         # os.chdir('test')
-        fn = 'Han Shoots Greedo.mp4'
+        fn = 'classroom.mp4'
         cmd = [
             fn, '-d', 'My_Upscale', '-log', 'info',
             '-ext', 'mp4v', '-ese'
@@ -107,10 +110,10 @@ class TestVideoExtraction(unittest.TestCase):
     def test_main_args_video_out2(self):
         os.chdir(os.path.dirname(os.path.realpath(__file__)))
         # os.chdir('test')
-        fn = 'Han Shoots Greedo.mp4'
+        fn = 'classroom.mp4'
         cmd = [
             fn, '-d', 'My_Upscale',
-            '-ext', 'hfyu', '-log', 'info', '-s', '3600',
+            '-ext', 'hfyu', '-log', 'info', '-s', '10', '-e', '20',
             '-x1', '.8', '-x0', '.1'
         ]
         result = dnn_pb_upscaler_unsharp.main(cmd)
@@ -119,19 +122,34 @@ class TestVideoExtraction(unittest.TestCase):
         files = glob.glob('*.mkv')
         self.assertTrue(len(files) > 0)
     
-    def test_main_args_video_sr10(self):
+    def test_main_args_video_ffmpg(self):
         os.chdir(os.path.dirname(os.path.realpath(__file__)))
         # os.chdir('test')
-        fn = 'Han Shoots Greedo.mp4'
+
+        fn = 'classroom.mp4'
+        a = fn.split('.')
+        fout = '{}_{}_01-{}.mp4'.format(a[0], 'X264', 10)
+        
         cmd = [
-            fn, '-d', 'My_Upscale', '--crop', '10', '10', '30', '30',
-            '-ext', 'hev1', '-log', 'info', '-s', '3600'
+            fn, '-d', 'My_Upscale', '--crop', '40', '40', '30', '30',
+            '-ext', 'x264', '-log', 'info', '-e', '10'
         ]
+        
         result = dnn_pb_upscaler_unsharp.main(cmd)
+                
         self.assertTrue(os.path.isdir(result))
         os.chdir(result)
-        files = glob.glob('*.mkv')
-        self.assertTrue(len(files) > 0)
+        self.assertTrue(os.path.isfile(fout))
+
+    def test_main_img2video(self):
+        os.chdir(os.path.dirname(os.path.realpath(__file__)))
+        cmd = ['-ext', 'mp4v', '--img-fps', '23.9762', 
+                '3433.png',
+                '3434.png',
+                '3435.png'
+        ]
+        result = dnn_pb_upscaler_unsharp.main(cmd)
+        pass
 
 
 if __name__ == '__main__':
