@@ -351,7 +351,22 @@ def process_pipeline(image, i_name, dt_set):
 
 
 def ext_based_workflows(dt_set):
+    """ This workflow will accept a file (single image or video), 
+    list of files (*.png on the cli auto expands to list), 
+    or a folder name containing frame numbered files with image extension
+    (e.g. 'folder/subfolder' where subfolder has 000000.tiff to 100900.tiff)
+
+    last option exists because cli shells do not work on 00's of 000's of files
+    or larger, but glob has no issue
+    """
     file_pattern = dt_set.file
+
+    # check if the file arg is a single entry that isdir
+    if len(file_pattern) == 1 and os.path.isdir(file_pattern[0]):
+        # replace the folder only list with glob
+        # as if the list of files were provided as a shell *.* expansion
+        file_pattern = glob.glob(file_pattern[0] + '/*')
+        file_pattern.sort()
 
     if dt_set.start:
         v_start = int(dt_set.start)
@@ -380,7 +395,7 @@ def ext_based_workflows(dt_set):
         ext = fp.split('.')[-1].lower()
         fnpfx = fp.split('.')[:-1][0]
 
-        if ext in ['jpg', 'jpeg', 'png']:
+        if ext in ['jpg', 'jpeg', 'png', 'tiff', 'tif']:
             # workflow for individual image_files
             if os.path.isfile(fp):
                 image = cv2.imread(fp)
@@ -398,8 +413,10 @@ def ext_based_workflows(dt_set):
                 fps = dt_set.img_fps
 
                 if o_ext in V_CODEC and vout is None:
-                    a = file_pattern[0].split('.')[:-1][0]
-                    b = file_pattern[-1].split('.')[:-1][0]
+                    a = file_pattern[0].split('.')[:-1][0]  # find starting frame label
+                    a = a.split('/')[-1]    # strip any subpath if it exist
+                    b = file_pattern[-1].split('.')[:-1][0] # find ending frame label
+                    b = b.split('/')[-1]    # strip any subpath if it exist
                     v_name = '{}_{}_{:0>{width}}-{:0>{width}}.{}'.format(
                             dt_set.out_dir.lower(), 
                             o_ext.upper(), 
@@ -644,7 +661,7 @@ def get_cli_args(args):
     parser.add_argument('-log', '--log', nargs=1, default='WARNING', 
         choices=['debug', 'info', 'warning'])
     parser.add_argument('file', nargs='*',
-        help='file_name or file_name_pattern')
+        help='file_name, file_name_pattern *.png, dir_name containing numbered img files')
     try:
         ns = parser.parse_args(args)
 

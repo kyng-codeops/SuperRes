@@ -151,6 +151,11 @@ class TestVideoExtraction(unittest.TestCase):
         result = dnn_pb_upscaler_unsharp.main(cmd)
         pass
 
+    def test_main_dir_o_imgs(self):
+        os.chdir(os.path.dirname(os.path.realpath(__file__)))
+        cmd = ['-ext', 'x264', '-fps', '23.976', 'dirFiles/GreatX']
+        result = dnn_pb_upscaler_unsharp.main(cmd)
+        pass
 
 if __name__ == '__main__':
     unittest.main()
