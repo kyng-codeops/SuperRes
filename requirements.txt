@@ -35,7 +35,7 @@ networkx==2.4
 numpy==1.18.4
 onnx==1.7.0
 opt-einsum==3.2.1
-Pillow==7.1.2
+Pillow==8.2.0
 plaidml==0.7.0
 plaidml-keras==0.7.0
 protobuf==3.6.1
