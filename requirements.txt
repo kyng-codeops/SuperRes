@@ -30,7 +30,7 @@ lazy-object-proxy==1.4.3
 Markdown==3.2.2
 matplotlib==3.2.1
 mccabe==0.6.1
-mxnet==1.5.1
+mxnet==1.9.1
 networkx==2.4
 numpy==1.22.0
 onnx==1.7.0
